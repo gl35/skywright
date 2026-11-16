@@ -2,7 +2,7 @@
 
 import { clamp } from './noise.js';
 
-export const input = { turn: 0, pitch: 0, throttle: 0.7, action: false };
+export const input = { turn: 0, pitch: 0, fwd: 0, throttle: 0.7, action: false };
 // realStick: pull back (down) to climb, like an aeroplane. Off: push up to climb.
 export const settings = { realStick: true };
 try { settings.realStick = localStorage.getItem('skywright.stick') !== 'push'; } catch { /* private mode */ }
@@ -54,6 +54,7 @@ export function pollInput(dt) {
   const kt = (k('ArrowRight') || k('KeyD') ? 1 : 0) - (k('ArrowLeft') || k('KeyA') ? 1 : 0);
   const kp = (k('ArrowUp') || k('KeyW') ? 1 : 0) - (k('ArrowDown') || k('KeyS') ? 1 : 0);
   input.turn = clamp(kt + stick.x, -1, 1);
+  input.fwd = clamp(kp - stick.y, -1, 1); // up is always forward when walking
   input.pitch = clamp((kp - stick.y) * (settings.realStick ? -1 : 1), -1, 1);
   const th = (k('KeyE') || k('ShiftLeft') ? 1 : 0) - (k('KeyQ') ? 1 : 0);
   if (th) input.throttle = clamp(input.throttle + th * dt * 0.7, 0, 1);

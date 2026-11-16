@@ -26,6 +26,11 @@ const VIEWS = [
   { name: 'TAIL', tilt: 0.36, elev: 0.93, ay: 0.74, zm: 1.3, sky: 1, skyH: 0.36 },
   { name: 'COCKPIT', tilt: 0.3, elev: 0.95, ay: 0.98, zm: 1.6, sky: 1, skyH: 0.42 },
 ];
+// On foot: looking over the pilot's shoulder, or through their eyes.
+const FOOT = [
+  { name: 'THIRD PERSON', tilt: 0.42, elev: 0.9, ay: 0.7, zoom: 15, sky: 1, skyH: 0.3, eye: 0 },
+  { name: 'FIRST PERSON', tilt: 0.33, elev: 0.94, ay: 0.9, zoom: 15, sky: 1, skyH: 0.4, eye: 2.3 },
+];
 // Great heights are drawn compressed so the ground stays in the picture.
 const visAlt = (a) => (a < 40 ? a : 40 + (a - 40) * 0.3);
 const cockpitCanvas = document.createElement('canvas');
@@ -43,6 +48,7 @@ const G = {
   transited: false, burnT: 0,
   abil: { t: 0, cd: 0 }, surfLabel: '',
   pilot: { t: 0, work: 0 },
+  foot: { x: 0, y: 0, rot: 0, view: 0, from: 'hangar', step: 0, moving: false },
   fx: [], fxT: 0, shakeT: 0, bounce: 0,
   quiz: null, task: null, sparks: [], drops: [], finds: [], portal: null, chain: 0, bonus: { sparks: 0, cash: 0, task: 0 },
   cards: [], afterCards: null,
@@ -229,6 +235,14 @@ const actions = {
   },
   fieldbodge(k) { G.pilot.work = 3; G.fail[k] = false; G.ac.cond[k] = Math.max(G.ac.cond[k], 8); },
   tow() { towBack('tow'); },
+  walk() { // get out: you steer the pilot now, close up
+    const at = pilotNow(0) || { x: G.plane.x + 3, y: G.plane.y + 3, rot: G.plane.heading };
+    Object.assign(G.foot, { x: at.x, y: at.y, rot: at.rot, from: G.mode, step: 0, moving: false });
+    G.mode = 'foot';
+    ui.hidePanel();
+    footBar.classList.remove('hidden');
+    footLabel();
+  },
   door(w) { // turn the key: the Ark goes through its own door to another year
     const s = G.save;
     s.visit = w; s.pick = null;
@@ -834,8 +848,32 @@ function angDiff(a, b) { let d = (a - b) % (Math.PI * 2); if (d > Math.PI) d -= 
 
 // Where the pilot is when the aircraft is down: walking round it on land and stopping to work,
 // or out on the wing if it is sitting on water. Returns null when they are in the cockpit.
+// The pilot under your control. On land they walk where you steer; afloat they keep to the wing.
+function updateFoot(dt) {
+  const F = G.foot, p = G.plane, m = G.model;
+  F.rot += input.turn * 2.3 * dt;
+  const v = input.fwd > 0 ? 3.4 * input.fwd : 1.6 * input.fwd;
+  F.moving = Math.abs(v) > 0.2;
+  if (F.moving) F.step += dt * 5;
+  let nx = F.x + Math.cos(F.rot) * v * dt, ny = F.y + Math.sin(F.rot) * v * dt;
+  const afloat = levelAt(p.x, p.y) === 0 && world().water;
+  if (afloat) { // stay on the wing: clamp to a strip across the aircraft
+    const ch = Math.cos(p.heading), sh = Math.sin(p.heading), span = m.tips * m.vs * 0.85;
+    const dx = nx - p.x, dy = ny - p.y;
+    const along = clamp(dx * ch + dy * sh, -0.6, 1.4), across = clamp(-dx * sh + dy * ch, -span, span);
+    nx = p.x + ch * along - sh * across; ny = p.y + sh * along + ch * across;
+  } else {
+    const here = levelAt(F.x, F.y), to = levelAt(nx, ny);
+    if ((to === 0 && world().water) || Math.abs(to - here) > 1) { nx = F.x; ny = F.y; F.moving = false; } // no swimming, no cliffs
+  }
+  F.x = nx; F.y = ny;
+}
 function pilotNow(dt) {
   const p = G.plane, m = G.model, P = G.pilot;
+  if (G.mode === 'foot') {
+    const F = G.foot, afloat = levelAt(p.x, p.y) === 0 && world().water;
+    return { x: F.x, y: F.y, z: afloat ? p.alt + G.belly * 0.3 : levelAt(F.x, F.y) * HZ, rot: F.rot, pose: F.moving ? Math.floor(F.step) % 2 : 0, onTop: afloat, hidden: F.view === 1 };
+  }
   if (!G.save || !(G.mode === 'hangar' || G.mode === 'field' || G.mode === 'cards')) return null;
   const lvl = levelAt(p.x, p.y);
   if (p.alt - (lvl * HZ + G.belly) > 0.8) return null; // still in the air
@@ -881,6 +919,7 @@ function tick(dt) {
   else if (G.mode === 'takeoff') updateTakeoff(dt);
   else if (G.mode === 'flying') updateFlight(dt);
   else if (G.mode === 'surface') updateSurface(dt);
+  else if (G.mode === 'foot') updateFoot(dt);
   else if (G.mode === 'rollout') updateRollout(dt);
   else if (G.mode === 'down') { // the wreck: cartwheeling and burning on land, settling and sinking at sea
     G.timer += dt; p.propSpin = 0;
@@ -917,7 +956,9 @@ function frame(now, once) {
 
   // camera: behind the aircraft in flight, slow orbit on the ground
   const wide = V.W > V.H;
-  const vw = inFlight ? VIEWS[G.view] : VIEWS[0];
+  const onFoot = G.mode === 'foot';
+  const who = pilotNow(dt);
+  const vw = onFoot ? FOOT[G.foot.view] : inFlight ? VIEWS[G.view] : VIEWS[0];
   const dark = Math.max(world().dark, clamp((p.alt - 50) / 120, 0, 1));
   let tz, tax, tay;
   if (inFlight || G.mode === 'title') {
@@ -925,6 +966,9 @@ function frame(now, once) {
     tz = (p.alt < 60 ? lerp(3.0, 2.0, p.alt / 60) : lerp(2.0, 1.25, clamp((p.alt - 60) / 160, 0, 1))) * vw.zm * ZK;
     tz *= 1.06 - 0.14 * Math.min(1, frac); // pull back as speed builds
     tax = 0.5; tay = G.mode === 'title' ? 0.78 : vw.ay + (G.view === 2 ? 0 : 0.07 * Math.min(1, frac)); // and look further ahead
+  } else if (onFoot) { // close in behind the pilot, or at their eye
+    G.camRot += angDiff(-G.foot.rot - Math.PI / 2, G.camRot) * Math.min(1, dt * 5);
+    tz = vw.zoom; tax = 0.5; tay = vw.ay;
   } else {
     G.camRot += dt * 0.12;
     tz = 3.8 * ZK; tax = wide && G.mode !== 'cards' ? 0.24 : 0.5; tay = wide ? 0.5 : 0.17;
@@ -939,12 +983,13 @@ function frame(now, once) {
   const realAlt = p.alt;
   p.alt = visAlt(realAlt); // draw with the compressed height, then put the real one back
   const shake = (G.mode === 'flying' && p.throttle > 0.85 ? (p.throttle - 0.85) * 5 : 0) + G.shakeT * 22 * V.q; // engine buzz, and the jolt of a hard arrival // the airframe buzzes at full power
-  setCamera(p.x, p.y, p.alt, G.camRot, G.zoom, G.ax + ((Math.random() - 0.5) * shake) / V.W, G.ay + ((Math.random() - 0.5) * shake) / V.H);
+  const fx = onFoot && who ? who.x : p.x, fy = onFoot && who ? who.y : p.y, fz = onFoot && who ? who.z + vw.eye : p.alt;
+  setCamera(fx, fy, fz, G.camRot, G.zoom, G.ax + ((Math.random() - 0.5) * shake) / V.W, G.ay + ((Math.random() - 0.5) * shake) / V.H);
   drawScene(cockpit ? cockpitCtx : ctx, {
     time: G.time, frame: G.frame, plane: p, model: G.model, scenery: G.scenery, puffs: G.puffs,
     inStorm: G.mode === 'flying' && (G.inCell || G.underCell), showPlane: !cockpit, budget: G.frame < G.boost ? 40 : 3,
     sky: G.sky, skyH: vw.skyH, dark, speedFrac: airborne ? frac : 0,
-    marks: inFlight ? marksNear(p) : null, pilot: pilotNow(dt), fx: G.fx,
+    marks: inFlight ? marksNear(p) : null, pilot: who && !who.hidden ? who : null, fx: G.fx,
   });
   if (cockpit) { // tip the whole outside world with the bank, then draw the cockpit level on top
     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -1019,7 +1064,22 @@ function useAbility() {
 ui.el.abilBtn.addEventListener('click', useAbility);
 ui.el.stopBtn.addEventListener('click', () => { if (G.mode === 'surface') makeCamp(false); });
 
+const footBar = document.getElementById('footBar');
+function footLabel() {
+  document.getElementById('footView').textContent = FOOT[G.foot.view].name;
+  document.getElementById('footHint').textContent = isTouch ? 'Drag up to walk, left and right to turn' : 'W or up arrow to walk, A / D to turn, V changes the view, B goes back';
+}
+function footBack() {
+  if (G.mode !== 'foot') return;
+  footBar.classList.add('hidden');
+  G.mode = G.foot.from;
+  refresh();
+}
+document.getElementById('footView').addEventListener('click', () => { G.foot.view = 1 - G.foot.view; footLabel(); beep(600, 0.04); });
+document.getElementById('footBack').addEventListener('click', footBack);
+
 function nextView() {
+  if (G.mode === 'foot') { G.foot.view = 1 - G.foot.view; footLabel(); beep(600, 0.04); return; }
   G.view = (G.view + 1) % VIEWS.length;
   ui.el.viewBtn.textContent = VIEWS[G.view].name;
   try { localStorage.setItem('skywright.view', G.view); } catch { /* private mode */ }
@@ -1043,7 +1103,7 @@ window.addEventListener('resize', onResize);
 onResize();
 initInput(canvas, ui.el.throttle, {
   action: tryFix,
-  key: (code) => { if (code === 'KeyM') toggleMute(); if (code === 'KeyN') musicBtn.click(); if (code === 'KeyX') useAbility(); if (code === 'KeyI') stickBtn.click(); if (code === 'KeyF') tryFix(); if (code === 'KeyV') nextView(); },
+  key: (code) => { if (code === 'KeyM') toggleMute(); if (code === 'KeyN') musicBtn.click(); if (code === 'KeyX') useAbility(); if (code === 'KeyB') footBack(); if (code === 'KeyI') stickBtn.click(); if (code === 'KeyF') tryFix(); if (code === 'KeyV') nextView(); },
 });
 G.model = aircraftModel('sparrow');
 G.belly = (G.model.nz * G.model.vs) / 2;

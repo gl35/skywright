@@ -120,3 +120,9 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .card .qq { font-size: 18px; font-weight: 700; margin: 14px 0; color: #ffd24a; }
 .card .btn.opt { text-align: left; background: transparent; color: #f4f1e6; border: 2px solid #f4f1e6; }
 .card .right { color: #8fe07a; font-weight: 700; } .card .wrong { color: #ff8a78; font-weight: 700; }
+
+#footBar { position: fixed; left: 50%; bottom: calc(14px + env(safe-area-inset-bottom)); transform: translateX(-50%); display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; width: min(560px, 96vw); }
+#footBar button { padding: 10px 12px; background: rgba(16, 24, 44, 0.82); border: 2px solid #f4f1e6; font-size: 12px; font-weight: 700; }
+#footBar #footBack { border-color: #ffd24a; color: #ffd24a; }
+#footHint { flex-basis: 100%; text-align: center; font-size: 12px; background: rgba(16, 24, 44, 0.7); padding: 5px 8px; }
+.hangar footer .btn + .btn { margin-top: 8px; }

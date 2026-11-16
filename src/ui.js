@@ -288,7 +288,8 @@ export function hangarHTML(G) {
     <section>${BODY[G.tab](G)}</section>
     <footer>${G.tab === 'mission'
       ? '<button class="btn primary" data-act="takeoff">Take off</button>'
-      : '<button class="btn primary" data-act="tab" data-arg="mission">Mission</button>'}</footer>
+      : '<button class="btn primary" data-act="tab" data-arg="mission">Mission</button>'}
+      <button class="btn ghost" data-act="walk">Get out and walk round</button></footer>
   </div>`;
 }
 
@@ -318,7 +319,8 @@ export function fieldHTML(G, onWater) {
     ${ac.fuel < 1 ? '<p class="warnline bad">▲ The tank is dry. Make some fuel here, or call for help.</p>' : ''}
     </section>
     <footer>${ac.fuel < 1 ? '<button class="btn" data-act="tow">Call for help</button>' : '<button class="btn primary" data-act="takeoff">Take off</button>'}
-      ${G.surfLabel && ac.fuel >= 1 ? `<button class="btn ghost" data-act="surface">${G.surfLabel}</button>` : ''}</footer>
+      ${G.surfLabel && ac.fuel >= 1 ? `<button class="btn ghost" data-act="surface">${G.surfLabel}</button>` : ''}
+      <button class="btn ghost" data-act="walk">${onWater ? 'Climb out on the wing' : 'Get out and walk round'}</button></footer>
   </div>`;
   return h;
 }
