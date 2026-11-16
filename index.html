@@ -6,14 +6,15 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="theme-color" content="#1f5fae" />
   <title>Skywright</title>
-  <script type="module" crossorigin src="./assets/index-DPT0KVvu.js"></script>
-  <link rel="stylesheet" crossorigin href="./assets/index-CZiObIOM.css">
+  <script type="module" crossorigin src="./assets/index-0-JTwW45.js"></script>
+  <link rel="stylesheet" crossorigin href="./assets/index-BQm1jY0P.css">
 </head>
 <body>
   <canvas id="game"></canvas>
 
   <div id="hud" class="hidden">
     <div id="nav"><div id="navArrow"></div><div id="navText"></div></div>
+    <div id="objective" class="hidden"></div>
     <div id="alert" class="hidden"></div>
     <div id="hint" class="hidden"></div>
     <div id="gauges">
@@ -24,6 +25,8 @@
     </div>
     <div id="throttle"><div id="thrFill"></div><span>THR</span></div>
     <button id="viewBtn">VIEW</button>
+    <button id="abilBtn"></button>
+    <button id="stopBtn" class="hidden">STOP</button>
     <button id="fixBtn" class="hidden">FIX</button>
     <div id="fixPanel" class="hidden">
       <div id="fixTitle"></div>
@@ -35,6 +38,7 @@
 
   <div id="panel" class="hidden"></div>
   <button id="musicBtn" title="Music on or off">&#9835;</button>
+  <button id="stickBtn" title="Which way climbs"></button>
   <div id="flash"></div>
 </body>
 </html>
