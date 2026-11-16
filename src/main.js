@@ -68,6 +68,10 @@ function setup() {
     G.newCraft = need;
     s.pick = null; // try the new one first
   }
+  for (let i = 0; i <= Math.min(s.mission, MISSIONS.length - 1); i++) for (const x of MISSIONS[i].also || []) { // extra machines met along the way
+    const X = AIRCRAFT[x];
+    if (!s.fleet[x]) s.fleet[x] = { cond: { engine: X.start.engine, frame: X.start.frame, fuel: X.start.fuel, avionics: X.start.avionics }, fuel: X.tank * X.start.tank };
+  }
   // the story suggests a machine for each flight, but any you own will do if it can get there
   const id = (G.craft = s.pick && canFly(s, m, s.pick) ? s.pick : need);
   G.ac = s.fleet[id];
@@ -428,7 +432,7 @@ function updateFlight(dt) {
   if (orbiting) base = Math.max(base, 0.9); // nothing to slow you down up here
   const still = ab === 'hover' || ab === 'mend';
   if (still) base = 0;
-  const abSpeed = ab === 'burner' ? 1.7 : ab === 'zoom' ? 1.3 : 1;
+  const abSpeed = ab === 'burner' ? 1.7 : ab === 'race' ? 1.5 : ab === 'zoom' ? 1.3 : 1;
   p.speed += (st.speed * base * boost * abSpeed - p.speed) * Math.min(1, dt * (still ? 2.5 : 0.7));
   p.propSpin = dead ? Math.max(0, p.propSpin - dt * 0.5) : 1;
 
@@ -459,7 +463,7 @@ function updateFlight(dt) {
   p.x += Math.cos(p.heading) * p.speed * dt;
   p.y += Math.sin(p.heading) * p.speed * dt;
 
-  if (!dead) ac.fuel = Math.max(0, ac.fuel - st.burn * (0.25 + 0.75 * p.throttle * p.throttle) * (f.fuel ? 4 : 1) * (orbiting ? 0.1 : 1) * (ab === 'lean' ? 0.33 : ab === 'burner' ? 3 : ab === 'zoom' ? 2 : 1) * dt);
+  if (!dead) ac.fuel = Math.max(0, ac.fuel - st.burn * (0.25 + 0.75 * p.throttle * p.throttle) * (f.fuel ? 4 : 1) * (orbiting ? 0.1 : 1) * (ab === 'lean' ? 0.33 : ab === 'burner' ? 3 : ab === 'zoom' || ab === 'race' ? 2 : 1) * dt);
 
   checkExtras(p, levelAt(p.x, p.y) * HZ + G.belly);
 

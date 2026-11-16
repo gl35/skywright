@@ -164,6 +164,12 @@ export const AIRCRAFT = {
     start: { engine: 74, frame: 60, fuel: 82, avionics: 55, tank: 0.5 },
     blurb: 'Lands on water. If something breaks over the ocean you can set down and fix it.',
   },
+  marlin: {
+    name: 'Marlin', kind: 'Racing flying boat', tier: 1.5, nose: '#24407a',
+    speed: 24, ceil: 24, climb: 6.5, tank: 95, burn: 0.62, turn: 1.15, wear: 1.15, floats: true,
+    start: { engine: 64, frame: 70, fuel: 60, avionics: 58, tank: 0.5 },
+    blurb: 'A racer from the old Adriatic seaplane circuit: boat hull, engine on struts above the wing. Quick and nimble, thirsty, and happy on the water.',
+  },
   dragonfly: {
     name: 'Dragonfly', kind: 'Clockwork ornithopter', tier: 1.6, nose: '#c9a24a',
     speed: 21, ceil: 26, climb: 7, tank: 100, burn: 0.42, turn: 1.5, wear: 1.1, floats: false,
@@ -207,6 +213,7 @@ export const AIRCRAFT = {
 // surf: how it gets about once it is down. water: sails. land 'flat': taxis on level ground. land 'climb': walks over rough ground.
 const EXTRA = {
   sparrow: { ability: { id: 'loop', name: 'LOOP', dur: 2.2, cd: 8, desc: 'A full loop, like a fairground wheel. Storms cannot touch you during it, and it shakes jammed controls free.' }, surf: { land: 'flat' } },
+  marlin: { ability: { id: 'race', name: 'RACE', dur: 4, cd: 12, desc: 'Full race power: half as fast again for a few seconds, at twice the fuel.' }, surf: { water: true } },
   heron: { ability: { id: 'lean', name: 'LEAN', dur: 14, cd: 20, desc: 'Lean the mixture: burns a third of the fuel for a while.' }, surf: { water: true } },
   dragonfly: { ability: { id: 'hover', name: 'HOVER', dur: 6, cd: 5, desc: 'Stops dead in the air and turns on the spot.' }, surf: { land: 'climb' } },
   kestrel: { ability: { id: 'highclimb', name: 'CLIMB', dur: 7, cd: 18, desc: 'Both engines to the stops: climbs far faster and well above its normal ceiling.' }, surf: { land: 'flat' } },
@@ -267,11 +274,11 @@ export const MISSIONS = [
     brief: 'Nowhere to land between here and Mango Key except the sea itself. The Heron can set down on water, so a breakdown is a pause, not the end.',
     arrive: [
       'Mango Key is one runway and a radio shack. The operator, an old man called Tomasi, has a photograph on the wall: your Nan, thirty years younger, holding a wrench beside this same Heron.',
-      '"She asked everyone the same thing," he says. "Had we seen a ship in the sky with no engines. We thought the sun had got to her."',
+      'Under a palm-leaf shelter behind the shack sits something faster than the Heron: a racing flying boat called the Marlin, left by a pilot who lost a bet. Take whichever you like, Tomasi says. "She asked everyone the same thing," he adds. "Had we seen a ship in the sky with no engines. We thought the sun had got to her."',
     ],
   },
   {
-    title: 'Storm alley', world: 'earth', from: 2, to: 3, craft: 'heron', pay: 620,
+    title: 'Storm alley', world: 'earth', from: 2, to: 3, craft: 'heron', pay: 620, also: ['marlin'],
     brief: 'Storm cells build fast on the way to Saffron Quay. They chew the airframe and fry the electrics. Go round them or stay underneath.',
     arrive: [
       'In the market at Saffron Quay a clockmaker named Farid Haddad takes one look at the unreadable pages in the logbook and goes quiet. "That is not a language. That is a parts list." He can read perhaps one line in ten.',

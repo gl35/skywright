@@ -98,6 +98,31 @@ function heron() {
   return { vox: v, vs: 0.5, props: [{ x: 28.4, y: 0, z: 4.5, r: 3.2 }], jets: [], tips: 14 };
 }
 
+// A racing flying boat: boat hull, wing on struts, engine carried above the wing, a float under each tip.
+function marlin() {
+  const v = new Vox(31, 31, 12, K), cy = 15;
+  const NAVY = 0x24407a, CREAM = 0xf0e2b6, GOLD = 0xd9a441, STEEL = 0x8a8f9c;
+  v.tube(3, 27.5, cy, 3, (x) => (x > 23 ? 1.9 - (x - 23) * 0.3 : x < 10 ? 0.7 + (x - 3) * 0.17 : 1.9), (x, y, z) => (z === 3 ? GOLD : NAVY));
+  v.box(12, cy - 1, 1, 22, cy + 1, 1, 0x1a2f5c); // planing step under the hull
+  v.box(13, 2, 6, 18, 28, 6, CREAM); // wing
+  v.box(13, 2, 6, 18, 3.5, 6, NAVY); v.box(13, 26.5, 6, 18, 28, 6, NAVY);
+  v.box(12.5, 6, 6, 12.5, 24, 6, 0xe2d2a2); // ailerons
+  for (const y of [cy - 2, cy + 2]) { v.box(14, y, 4, 14, y, 5, STEEL); v.box(17, y, 4, 17, y, 5, STEEL); }
+  for (const y of [4, 26]) { v.tube(13, 18, y, 3.3, (x) => (x > 17 ? 0.5 : 0.8), NAVY); v.box(15.5, y, 4, 15.5, y, 5, STEEL); } // tip floats
+  v.tube(12, 19, cy, 8.4, (x) => (x > 18 ? 0.8 : 1.15), STEEL); // engine above the wing
+  v.tube(19, 19.5, cy, 8.4, () => 0.7, DARK);
+  for (const x of [14, 17]) v.box(x, cy, 7, x, cy, 7.5, STEEL);
+  v.box(13, cy + 1, 9, 16, cy + 1, 9, 0x6a5040); // exhaust
+  for (let h = 0; h <= 4; h += 0.5) v.box(3 + h * 0.3, cy, 4 + h, 6.5 - h * 0.3, cy, 4 + h, NAVY); // fin
+  for (let d = 0; d <= 4; d += 0.5) v.box(3 + d * 0.2, cy - d, 6, 6, cy + d, 6, CREAM); // tailplane
+  v.box(19.5, cy, 5, 20.5, cy, 5, DARK); // open cockpit
+  v.box(21.5, cy - 0.5, 5, 21.5, cy + 0.5, 5.5, GLASS);
+  finish(v);
+  for (const y of [8, 22]) stripe(v, 14, y, 17, y + 0.5, GOLD);
+  stripe(v, 4, cy, 5.5, cy, GOLD);
+  return { vox: v, vs: 0.5, props: [{ x: 20.2, y: 0, z: 8.4, r: 3 }], jets: [], tips: 13 };
+}
+
 function kestrel() {
   const v = new Vox(35, 37, 10, K), cy = 18;
   const SILVER = 0xd2d8dd, ORANGE = 0xf08a24;
@@ -253,7 +278,7 @@ function dragonfly(pose = 0) {
   return { vox: v, vs: 0.5, props: [], jets: [], tips: 13, poses: 4, fps: 14 };
 }
 
-const BUILDERS = { sparrow, heron, dragonfly, kestrel, comet, meteor, ark, starling };
+const BUILDERS = { sparrow, heron, marlin, dragonfly, kestrel, comet, meteor, ark, starling };
 export const ROLL_STEPS = 4; // variants from -4..+4, 10 degrees apart
 const cache = {};
 
