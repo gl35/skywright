@@ -2,7 +2,7 @@
 
 import './style.css';
 import { TASKS, WORLDS, AIRCRAFT, PARTS, PART_KEYS, MISSIONS, INTRO, START_SAVE, KIT_COST, KIT_CAP_COST, KIT_CAP_MAX } from './data.js';
-import { calcStats, repairCost, fuelCost, upCost, missionOf, targetOf, thinAir, km, jobPay } from './rules.js';
+import { canFly, calcStats, repairCost, fuelCost, upCost, missionOf, targetOf, thinAir, km, jobPay } from './rules.js';
 import { aircraftModel, buildScenery } from './models.js';
 import { V, resizeView, watchSpeed, setCamera, drawScene, screenBearing, cloudsNow, project } from './render.js';
 import { HZ, levelAt, airfieldAt, setWorld, world } from './world.js';
@@ -62,11 +62,14 @@ function persist() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(G.save)
 function setup() {
   const s = G.save, m = (G.mission = missionOf(s));
   for (let i = Math.min(s.mission, MISSIONS.length - 1); i >= 0; i--) if (MISSIONS[i].ch) { G.chapter = MISSIONS[i].ch; break; }
-  const id = m.craft, A = AIRCRAFT[id];
-  if (!s.fleet[id]) { // a new machine joins the fleet in whatever state the story left it
-    s.fleet[id] = { cond: { engine: A.start.engine, frame: A.start.frame, fuel: A.start.fuel, avionics: A.start.avionics }, fuel: A.tank * A.start.tank };
-    G.newCraft = id;
+  const need = m.craft, N = AIRCRAFT[need];
+  if (!s.fleet[need]) { // a new machine joins the fleet in whatever state the story left it
+    s.fleet[need] = { cond: { engine: N.start.engine, frame: N.start.frame, fuel: N.start.fuel, avionics: N.start.avionics }, fuel: N.tank * N.start.tank };
+    G.newCraft = need;
+    s.pick = null; // try the new one first
   }
+  // the story suggests a machine for each flight, but any you own will do if it can get there
+  const id = (G.craft = s.pick && canFly(s, m, s.pick) ? s.pick : need);
   G.ac = s.fleet[id];
   G.stats = calcStats(id, s.up);
   G.model = aircraftModel(id);
@@ -141,7 +144,7 @@ function towBack(kind) {
   const first = kind === 'crash' ? 'You walk away from it. The machine does not look as lucky.'
     : kind === 'ditch' ? 'She settles into the swell and you climb out onto the wing.'
       : 'With a dry tank there is nothing to do but wait.';
-  showCards([{ title, body: [first, `It takes time, favours and $${fee} to get the ${AIRCRAFT[G.mission.craft].name} back to ${home}.${dmg ? ' Every part took damage.' : ''}`], btn: 'Back to the workshop' }], enterHangar);
+  showCards([{ title, body: [first, `It takes time, favours and $${fee} to get the ${AIRCRAFT[G.craft].name} back to ${home}.${dmg ? ' Every part took damage.' : ''}`], btn: 'Back to the workshop' }], enterHangar);
 }
 
 const actions = {
@@ -163,7 +166,7 @@ const actions = {
     G.ac.fuel += units;
   },
   repair(a) {
-    const [k, pts] = a.split(':'), n = +pts, c = repairCost(G.mission.craft, n);
+    const [k, pts] = a.split(':'), n = +pts, c = repairCost(G.craft, n);
     if (G.save.money < c) return;
     G.save.money -= c;
     G.ac.cond[k] = Math.min(100, G.ac.cond[k] + n);
@@ -186,7 +189,7 @@ const actions = {
     if (lv >= 3 || s.money < upCost(lv)) return;
     s.money -= upCost(lv);
     s.up[k]++;
-    G.stats = calcStats(G.mission.craft, s.up);
+    G.stats = calcStats(G.craft, s.up);
   },
   fieldfix(k) {
     const s = G.save;
@@ -197,6 +200,14 @@ const actions = {
   },
   fieldbodge(k) { G.fail[k] = false; G.ac.cond[k] = Math.max(G.ac.cond[k], 8); },
   tow() { towBack('tow'); },
+  fly(id) { // take a different machine from the fleet
+    const s = G.save;
+    if (!canFly(s, G.mission, id)) return;
+    s.pick = id === G.mission.craft ? null : id;
+    setup(); park();
+    G.newCraft = null;
+    beep(600, 0.05);
+  },
   surface() { // carry on along the ground or the water instead of taking off
     G.mode = 'surface';
     ui.hidePanel();
@@ -261,6 +272,7 @@ function planExtras() {
   const T = TASKS[G.save.mission];
   if (T) {
     if (T.type === 'high') G.task = { ...T, done: false };
+    else if (T.type === 'land' && T.water && !st.floats) G.task = null; // this machine cannot set down on water, so no rescue today
     else {
       // water jobs go on open water; everything else goes on dry ground, never in the sea
       const wet = (x, y) => !levelAt(x, y) && !levelAt(x + 9, y) && !levelAt(x - 9, y) && !levelAt(x, y + 9) && !levelAt(x, y - 9);
@@ -404,7 +416,7 @@ function updateFlight(dt) {
   const p = G.plane, st = G.stats, ac = G.ac, f = G.fail, c = ac.cond, m = G.mission, grav = world().gravity;
   G.legTime += dt;
   G.abil.t = Math.max(0, G.abil.t - dt); G.abil.cd = Math.max(0, G.abil.cd - dt);
-  const abil = AIRCRAFT[m.craft].ability, ab = G.abil.t > 0 ? abil.id : null; // the special move in progress, if any
+  const abil = AIRCRAFT[G.craft].ability, ab = G.abil.t > 0 ? abil.id : null; // the special move in progress, if any
   p.boosting = ab === 'burner' || ab === 'zoom'; p.shield = ab === 'shield';
   checkStorms();
   p.throttle = input.throttle;
@@ -549,7 +561,7 @@ function updateRollout(dt) {
 function completeMission() {
   const s = G.save, m = G.mission, hard = G.landing && G.landing.hard;
   s.money += m.pay;
-  s.mission++; s.shift = false;
+  s.mission++; s.shift = false; s.pick = null;
   const body = m.arrive.slice();
   const extra = [];
   if (G.bonus.task) extra.push(`the job on the way ($${G.bonus.task})`);
@@ -565,7 +577,7 @@ function completeMission() {
 
 // Stopped somewhere that is not a landing ground: open the camp screen (repairs from kits, take off, or move on).
 function makeCamp(onWater) {
-  const A = AIRCRAFT[G.mission.craft], lvl = levelAt(G.plane.x, G.plane.y), t = G.task;
+  const A = AIRCRAFT[G.craft], lvl = levelAt(G.plane.x, G.plane.y), t = G.task;
   if (t && !t.done && t.type === 'land' && Math.hypot(t.x - G.plane.x, t.y - G.plane.y) < t.r + 10) { // you set down where you were needed
     finishTask();
     showCards([{ title: 'Job done', body: [t.after, `<b>+$${t.pay}</b>`], btn: 'Carry on' }], () => makeCamp(onWater));
@@ -582,7 +594,7 @@ function makeCamp(onWater) {
 
 // Sailing, walking or taxiing. Slow, but it gets you to a better place to take off from, or all the way there.
 function updateSurface(dt) {
-  const p = G.plane, st = G.stats, A = AIRCRAFT[G.mission.craft], w = world();
+  const p = G.plane, st = G.stats, A = AIRCRAFT[G.craft], w = world();
   p.throttle = input.throttle;
   p.propSpin = p.throttle > 0.05 ? 1 : 0.15;
   const here = levelAt(p.x, p.y), wetHere = here === 0 && w.water;
@@ -746,7 +758,7 @@ function frame(now, once) {
     drawCockpit(ctx, V.W, V.H, {
       speed: p.speed / (G.stats.speed * (1 + G.stats.space)), alt: realAlt / G.stats.ceil, fuel: G.ac.fuel / G.stats.tank,
       roll: p.roll, vz: clamp(p.vz / G.stats.climb, -1, 1), time: G.time,
-      prop: G.model.props.length > 0 && p.propSpin > 0.05, nose: AIRCRAFT[G.mission.craft].nose,
+      prop: G.model.props.length > 0 && p.propSpin > 0.05, nose: AIRCRAFT[G.craft].nose,
     });
   }
   p.alt = realAlt;
@@ -775,7 +787,7 @@ function frame(now, once) {
         const txt = `\u25c6 ${job.label}${where}`;
         if (O.textContent !== txt) O.textContent = txt;
       }
-      const ab = AIRCRAFT[G.mission.craft].ability, B = ui.el.abilBtn;
+      const ab = AIRCRAFT[G.craft].ability, B = ui.el.abilBtn;
       B.classList.toggle('hidden', G.mode !== 'flying');
       B.classList.toggle('on', G.abil.t > 0); B.classList.toggle('cool', G.abil.t <= 0 && G.abil.cd > 0);
       B.textContent = G.abil.t > 0 ? ab.name : G.abil.cd > 0 ? `${ab.name} ${Math.ceil(G.abil.cd)}` : ab.name;
@@ -798,7 +810,7 @@ function frame(now, once) {
 // The machine's special move.
 function useAbility() {
   if (G.mode !== 'flying' || G.abil.t > 0 || G.abil.cd > 0) return;
-  const ab = AIRCRAFT[G.mission.craft].ability;
+  const ab = AIRCRAFT[G.craft].ability;
   G.abil.t = ab.dur; G.abil.cd = ab.dur + ab.cd;
   if (ab.id === 'loop') G.fail.frame = false; // the loop shakes jammed controls free
   beep(500, 0.08); setTimeout(() => beep(760, 0.12), 80);

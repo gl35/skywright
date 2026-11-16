@@ -27,6 +27,9 @@ export function missionOf(save) {
   if (save.mission < MISSIONS.length) return MISSIONS[save.mission];
   return { free: true, title: 'Free flight', world: 'deep', from: 0, to: 0, craft: 'starling', pay: 0, brief: 'Nothing left to deliver. Fly for the joy of it.' };
 }
+// Can this machine be taken on this mission? You must own it, and only a star raft can leave the world.
+export const canFly = (save, m, id) => !!save.fleet[id] && (!m.transit || !!AIRCRAFT[id].orbit);
+
 // Where a mission ends: { world, stop } with the stop's data.
 export function targetOf(m) {
   const w = m.transit ? m.transit.world : m.world, i = m.transit ? m.transit.to : m.to;

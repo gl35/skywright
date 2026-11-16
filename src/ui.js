@@ -1,7 +1,7 @@
 // DOM screens: the flight HUD, the in-flight repair mini-game, story cards and the hangar.
 
 import { surfText, WORLDS, AIRCRAFT, UPGRADES, PARTS, PART_KEYS, MISSIONS, INTRO, EPILOGUE, KIT_COST, KIT_CAP_COST, KIT_CAP_MAX, BIOMES } from './data.js';
-import { calcStats, cruiseRange, repairCost, fuelCost, upCost, missionDist, targetOf, km, fmtAlt, jobPay } from './rules.js';
+import { canFly, calcStats, cruiseRange, repairCost, fuelCost, upCost, missionDist, targetOf, km, fmtAlt, jobPay } from './rules.js';
 
 const $ = (id) => document.getElementById(id);
 export const el = {};
@@ -138,7 +138,7 @@ export function quizResultHTML(q, ok, pay) {
 }
 
 function workshop(G) {
-  const s = G.save, ac = G.ac, st = G.stats, id = G.mission.craft;
+  const s = G.save, ac = G.ac, st = G.stats, id = G.craft;
   const need = st.tank - ac.fuel;
   const full = fuelCost(need);
   const afford = Math.min(need, Math.floor(s.money / 0.6));
@@ -191,7 +191,7 @@ function skills(G) {
 
 function fleet(G) {
   const s = G.save;
-  let h = '<p><small>Each part of the journey needs its own machine. They come to you as the story goes.</small></p>';
+  let h = '<p><small>Machines come to you as the story goes. The logbook suggests one for each flight, but you can take any you own.</small></p>';
   for (const id of Object.keys(AIRCRAFT)) {
     const A = AIRCRAFT[id], own = s.fleet[id];
     if (!own) { h += '<div class="row"><div><div class="name">? ? ?</div><p>Not yet yours.</p></div></div>'; continue; }
@@ -199,9 +199,11 @@ function fleet(G) {
     const worst = Math.min(...PART_KEYS.map((k) => own.cond[k]));
     h += `<div class="row">
       <div class="name">${A.name} <small>${A.kind}</small></div>
-      <div class="acts"><button class="mini" disabled>${id === G.mission.craft ? 'Flying now' : `${Math.round(worst)}% worst part`}</button></div>
+      <div class="acts">${id === G.craft ? '<button class="mini" disabled>Flying now</button>'
+        : canFly(s, G.mission, id) ? `<button class="mini gold" data-act="fly" data-arg="${id}">Fly this</button>`
+          : '<button class="mini" disabled>Cannot leave the world</button>'}</div>
       <div>
-        <p>${A.blurb}</p>
+        <p>${A.blurb}${id === G.mission.craft ? ' <b>The logbook suggests this one.</b>' : ''} Worst part: ${Math.round(worst)}%.</p>
         <p class="abil"><b>${A.ability.name}:</b> ${A.ability.desc}</p>
         <p>${surfText(A)}</p>
         <div class="stats"><span>${Math.round(st.speed * (1 + st.space) * 10)} kt</span><span>${fmtAlt(st.ceil)}</span><span>${km(cruiseRange(st, st.tank))} km</span></div>
@@ -226,6 +228,7 @@ export function planWarnings(G) {
   const s = G.save, ac = G.ac, st = G.stats, m = G.mission;
   const out = [];
   if (m.free) return out;
+  if (G.craft !== m.craft) out.push(['warn', `The logbook suggests the ${AIRCRAFT[m.craft].name} for this flight. You are taking the ${AIRCRAFT[G.craft].name}. Change machines in the Fleet tab.`]);
   const d = missionDist(m), b = BIOMES[targetOf(m).stop.biome];
   const r = cruiseRange(st, ac.fuel);
   if (m.transit) { if (ac.fuel < st.tank * 0.6) out.push(['warn', 'Fill the tank. The climb to space is thirsty.']); }
@@ -242,7 +245,7 @@ export function planWarnings(G) {
 }
 
 function mission(G) {
-  const m = G.mission, A = AIRCRAFT[m.craft];
+  const m = G.mission, A = AIRCRAFT[G.craft];
   if (m.free) return `<div class="row"><div><div class="name">${m.title}</div><p>${EPILOGUE}</p></div></div>`;
   const t = targetOf(m), d = missionDist(m), w = planWarnings(G);
   return `<div class="row"><div>
@@ -262,7 +265,7 @@ const BODY = { workshop, skills, fleet, logbook, mission };
 export function hangarHTML(G) {
   const s = G.save, m = G.mission, w = WORLDS[m.world], stop = w.stops[m.from];
   return `<div class="hangar">
-    <header><div><h2>${stop.name}</h2><small>${w.id === 'earth' ? stop.tag : w.name} · ${AIRCRAFT[m.craft].name}</small></div><div class="money">$${s.money}</div></header>
+    <header><div><h2>${stop.name}</h2><small>${w.id === 'earth' ? stop.tag : w.name} · ${AIRCRAFT[G.craft].name}</small></div><div class="money">$${s.money}</div></header>
     <div class="tabs">${TABS.map(([k, n]) => `<button data-act="tab" data-arg="${k}" class="${G.tab === k ? 'on' : ''}">${n}</button>`).join('')}</div>
     <section>${BODY[G.tab](G)}</section>
     <footer>${G.tab === 'mission'
