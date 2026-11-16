@@ -107,7 +107,7 @@ function cellOf(gx, gy) {
     c.push({ type: 'herd', kind: kinds[Math.floor(hash2(gx, gy, 106) * kinds.length)], n: 3 + Math.floor(hash2(gx, gy, 107) * 4), x, y, ph, scare: 0, away: 0 });
   }
   if (BIRDS[b] && hash2(gx, gy, 102) < 0.34) {
-    c.push({ type: 'flock', kind: BIRDS[b], n: 5 + Math.floor(hash2(gx, gy, 110) * 5), x, y, ph, alt: lvl * HZ + 7 + hash2(gx, gy, 108) * 7, dir: hash2(gx, gy, 109) < 0.5 ? 1 : -1 });
+    c.push({ type: 'flock', kind: BIRDS[b], n: 5 + Math.floor(hash2(gx, gy, 110) * 5), x, y, ph, alt: lvl * HZ + 2.5 + hash2(gx, gy, 108) * 3.5, dir: hash2(gx, gy, 109) < 0.5 ? 1 : -1 });
   }
   if (cache.size > 500) cache.clear();
   cache.set(key, c);

@@ -178,14 +178,35 @@ const actions = {
   kit() { const s = G.save; if (s.kits < s.kitCap && s.money >= KIT_COST) { s.money -= KIT_COST; s.kits++; } },
   kitcap() { const s = G.save; if (s.kitCap < KIT_CAP_MAX && s.money >= KIT_CAP_COST) { s.money -= KIT_CAP_COST; s.kitCap++; } },
   shift() { // an odd job is a question: answer it right to be paid
-    G.quiz = makeQuestion();
-    ui.showPanel(ui.quizHTML(G.quiz, jobPay(G.save, G.stats)));
+    G.quiz = makeQuestion(); G.quizFor = 'job';
+    ui.showPanel(ui.quizHTML(G.quiz, `Odd job \u00b7 pays $${jobPay(G.save, G.stats)} for the right answer`));
+  },
+  brew() { // stuck in the open with no fuel: an engineer makes some
+    G.quiz = makeQuestion(); G.quizFor = 'fuel';
+    G.quiz.intro = G.stats.space ? 'You unfold the solar still over a seam of ice. To set the cracking plates right you need to know:'
+      : 'You rig a still from the cooking pot and a length of fuel line. To get the mixture right you need to know:';
+    ui.showPanel(ui.quizHTML(G.quiz, 'Making fuel \u00b7 a right answer adds a fifth of a tank'));
+  },
+  scav() {
+    G.quiz = makeQuestion(); G.quizFor = 'kit';
+    G.quiz.intro = 'You go looking for anything that could be a gasket, a clip or a length of wire. To make it fit you need to know:';
+    ui.showPanel(ui.quizHTML(G.quiz, 'Scavenging \u00b7 a right answer makes one repair kit'));
   },
   answer(i) {
     const q = G.quiz, s = G.save, ok = +i === q.answer, pay = jobPay(s, G.stats);
-    if (ok) { s.money += pay; s.shift = (+s.shift || 0) + 1; beep(880, 0.1); setTimeout(() => beep(1180, 0.14), 90); }
-    else beep(150, 0.25, 'sawtooth');
-    ui.showPanel(ui.quizResultHTML(q, ok, pay));
+    let good, bad = `The answer was <b>${q.right}</b>. `;
+    if (G.quizFor === 'fuel') {
+      if (ok) G.ac.fuel = Math.min(G.stats.tank, G.ac.fuel + G.stats.tank * 0.2);
+      good = 'It drips, it smells terrible, and it burns. <b>A fifth of a tank.</b>'; bad += 'The batch is ruined, but you can try again.';
+    } else if (G.quizFor === 'kit') {
+      if (ok) s.kits = Math.min(s.kitCap, s.kits + 1);
+      good = 'Not pretty, but it will hold. <b>One repair kit.</b>'; bad += 'It does not fit. Try something else.';
+    } else {
+      if (ok) { s.money += pay; s.shift = (+s.shift || 0) + 1; }
+      good = `You are paid <b>$${pay}</b>.`; bad += 'No pay this time, but there is always another job.';
+    }
+    if (ok) { beep(880, 0.1); setTimeout(() => beep(1180, 0.14), 90); } else beep(150, 0.25, 'sawtooth');
+    ui.showPanel(ui.quizResultHTML(q, ok, ok ? good : bad, G.mode === 'field' ? 'Back to camp' : 'Back to the workshop'));
   },
   quizdone() { G.quiz = null; },
   upgrade(k) {
@@ -369,8 +390,10 @@ function updateTakeoff(dt) {
   const onGround = p.alt <= floor + 0.01;
   p.speed = Math.min(st.speed * 0.6, p.speed + st.speed * 0.32 * p.throttle * dt);
   const nx = p.x + Math.cos(p.heading) * p.speed * dt, ny = p.y + Math.sin(p.heading) * p.speed * dt;
-  if (onGround && levelAt(nx, ny) !== here) { // ran off the end of the flat ground without lifting off: roll back and try again
-    if (G.takeoffFrom) { p.x = G.takeoffFrom.x; p.y = G.takeoffFrom.y; }
+  // The run can bump over gentle ground, but not up a bank, and not into the sea unless she floats.
+  const to = levelAt(nx, ny), sea = to === 0 && world().water;
+  if (onGround && to !== here && (to > here + 1 || (sea && !st.floats) || (here === 0 && world().water && !AIRCRAFT[G.craft].surf.land))) {
+    p.heading += Math.PI; // no room that way: swing round and run back the other way
     p.speed = 0;
     beep(160, 0.2, 'sawtooth');
     return;
@@ -387,7 +410,7 @@ function updateTakeoff(dt) {
   else if (!ready) ui.setAlert('Gathering speed', true);
   else if (onGround) ui.setAlert(`Pull up to take off: ${up}`, true);
   else ui.setAlert(null);
-  if (p.alt > floor + 4) { G.mode = 'flying'; ui.setAlert(null); }
+  if (p.alt > floor + 4) { G.mode = 'flying'; G.lastLvl = here; ui.setAlert(null); }
 }
 
 function checkStorms() {
@@ -428,7 +451,7 @@ function updateFlight(dt) {
   const power = dead ? 0 : p.throttle * (f.engine ? 0.5 : 1) * (0.8 + 0.2 * c.engine / 100);
   const thin = thinAir(st, p.alt), boost = 1 + thin * st.space; // thin air: spacecraft get much faster up high
   const orbiting = st.orbit && p.alt > 170;
-  let base = st.hover ? (dead ? 0.1 : power) : dead ? 0.35 : 0.25 + 0.75 * power;
+  let base = st.hover ? (dead ? 0.1 : power) : dead ? 0.42 : 0.25 + 0.75 * power;
   if (orbiting) base = Math.max(base, 0.9); // nothing to slow you down up here
   const still = ab === 'hover' || ab === 'mend';
   if (still) base = 0;
@@ -445,7 +468,8 @@ function updateFlight(dt) {
   p.roll += (turn * 0.7 + wobble - p.roll) * Math.min(1, dt * 5);
 
   let vzT;
-  if (dead) vzT = (st.hover ? -0.8 : -1.6) + Math.min(0, input.pitch) * st.climb + Math.max(0, input.pitch) * 0.7;
+  if (dead) vzT = (st.hover ? -0.6 : -1.1) + // a dead engine is a long shallow glide, not a fall
+    Math.min(0, input.pitch) * st.climb + Math.max(0, input.pitch) * 0.7;
   else vzT = input.pitch > 0 ? input.pitch * st.climb * (0.3 + 0.7 * power) : input.pitch * st.climb * 0.9;
   if (ab === 'highclimb' && vzT > 0) vzT *= 2.5;
   if (ab === 'zoom') vzT = 30;
@@ -465,6 +489,7 @@ function updateFlight(dt) {
 
   if (!dead) ac.fuel = Math.max(0, ac.fuel - st.burn * (0.25 + 0.75 * p.throttle * p.throttle) * (f.fuel ? 4 : 1) * (orbiting ? 0.1 : 1) * (ab === 'lean' ? 0.33 : ab === 'burner' ? 3 : ab === 'zoom' || ab === 'race' ? 2 : 1) * dt);
 
+  if (orbiting && ac.fuel < st.tank * 0.12) ac.fuel += st.tank * 0.006 * dt; // sun on the cells: never stranded in orbit
   checkExtras(p, levelAt(p.x, p.y) * HZ + G.belly);
 
   // wear and tear
@@ -490,7 +515,8 @@ function updateFlight(dt) {
   }
 
   const lvl = levelAt(p.x, p.y), floor = lvl * HZ + G.belly;
-  if (p.alt <= floor) { p.alt = floor; touchdown(lvl); return; }
+  if (p.alt <= floor) { p.alt = floor; touchdown(lvl, G.lastLvl); return; }
+  G.lastLvl = lvl;
 
   // leaving this world: hold high altitude until the burn
   if (m.transit && !G.transited) {
@@ -508,7 +534,7 @@ function updateFlight(dt) {
   const nearField = airfieldAt(p.x, p.y) >= 0 || dist < 60;
   const wet = world().water;
   if (failed) ui.setAlert(`${PARTS[failed].fail} · ${PARTS[failed].effect}${G.save.kits > 0 ? ' · PRESS FIX' : ' · NO KITS: BODGE IT'}`);
-  else if (dead) ui.setAlert(ac.fuel <= 0 ? 'OUT OF FUEL · GLIDING' : 'ENGINE DEAD · GLIDING');
+  else if (dead) ui.setAlert(`${ac.fuel <= 0 ? 'OUT OF FUEL' : 'ENGINE DEAD'} · GLIDING · look for ${st.floats ? 'water or open ground' : 'open ground'} and set down`);
   else if (G.heat > 0.15) ui.setAlert('RE-ENTRY HEAT · SHALLOW YOUR DESCENT');
   else if (ahead > p.alt - 0.5 && ahead > floor + 1) ui.setAlert('TERRAIN AHEAD · CLIMB OR TURN');
   else if (p.alt - floor < 2.5 && p.vz < 0 && !nearField) ui.setAlert(lvl === 0 && wet && !st.floats ? 'TOO LOW · PULL UP' : 'LOW');
@@ -525,25 +551,44 @@ function updateFlight(dt) {
   else ui.setAlert(null);
 }
 
-function touchdown(lvl) {
-  const p = G.plane, st = G.stats, c = G.ac.cond;
+// The ground has been reached. `was` is the ground level a moment ago.
+// Coming down onto ground, flat or not, is a landing: rough ground and too much speed cost the airframe,
+// but you walk away. Only flying level into ground that rises in front of you is a crash.
+function touchdown(lvl, was) {
+  const p = G.plane, st = G.stats, c = G.ac.cond, A = AIRCRAFT[G.craft];
   const af = airfieldAt(p.x, p.y);
   const fast = p.speed > st.speed * 0.8, hard = fast || p.vz < -3;
+  const wet = lvl === 0 && world().water;
+  // a bank one step high is a bump you can ride over; a wall two steps high, met while flying level, is not
+  const steep = levelAt(p.x + Math.cos(p.heading) * 5, p.y + Math.sin(p.heading) * 5) >= lvl + 2; // the ground keeps climbing ahead
+  const intoHill = was !== undefined && p.vz > -1.2 && (lvl >= was + 2 || (lvl > was && steep));
+  const bump = was !== undefined && lvl === was + 1 && p.vz > -1.2;
+  let rough = bump;
+  if (!wet) for (const [dx, dy] of [[4, 0], [-4, 0], [0, 4], [0, -4]]) if (Math.abs(levelAt(p.x + dx, p.y + dy) - lvl) >= 2) rough = true;
   let res;
   if (af >= 0 && lvl === 2) res = 'airfield';
-  else if (lvl === 0 && world().water) res = st.floats ? 'water' : 'ditch';
-  else if (lvl <= 3 && !fast) res = 'field';
-  else res = 'crash';
+  else if (wet) res = st.floats ? 'water' : 'ditch';
+  else if (intoHill) res = 'crash';
+  else res = 'field';
   G.landing = { res, af, hard };
   G.timer = 0;
+  G.campNote = '';
   ui.closeFix(); ui.setAlert(null); ui.setHint(null);
   if (res === 'ditch' || res === 'crash') {
     G.mode = 'down';
     thud(0.9, 1.1); ui.flash();
   } else {
-    c.frame = Math.max(0, c.frame - ((res === 'field' && !st.hover ? 8 : 0) + (hard ? 10 : 0)));
+    let dmg = hard ? 10 : 0;
+    if (res === 'field' && !st.hover) {
+      const onFloats = !A.surf.land; // a seaplane put down on dry land slides in on its floats
+      dmg += 3 + (rough ? 10 : 0) + (onFloats ? 14 : 0) + (fast ? 6 : 0);
+      G.campNote = onFloats ? 'Floats are not wheels. She slid to a stop on her keels and the airframe took a beating.'
+        : rough ? 'Rough ground. You are down in one piece, but the airframe took a knock.'
+          : fast ? 'You came in fast and bounced. The airframe took a knock.' : 'Down safely on open ground.';
+    }
+    c.frame = Math.max(0, c.frame - dmg);
     G.mode = 'rollout';
-    thud(hard ? 0.5 : 0.2, 0.3);
+    thud(hard || rough ? 0.5 : 0.2, 0.3);
   }
 }
 

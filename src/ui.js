@@ -120,20 +120,20 @@ export function cardHTML(c) {
   </div>`;
 }
 
-export function quizHTML(q, pay) {
+export function quizHTML(q, head) {
   return `<div class="card">
-    <small class="chapter">Odd job · pays $${pay} for the right answer</small>
+    <small class="chapter">${head}</small>
     <p>${q.intro}</p>
     <p class="qq">${q.q}</p>
     ${q.options.map((o, i) => `<button class="btn opt" data-act="answer" data-arg="${i}">${'ABCD'[i]}. ${o}</button>`).join('')}
   </div>`;
 }
-export function quizResultHTML(q, ok, pay) {
+export function quizResultHTML(q, ok, text, back) {
   return `<div class="card">
     <h2 class="${ok ? 'right' : 'wrong'}">${ok ? 'Right' : 'Not quite'}</h2>
     <p>${q.why}</p>
-    <p>${ok ? `You are paid <b>$${pay}</b>.` : `The answer was <b>${q.right}</b>. No pay this time, but there is always another job.`}</p>
-    <button class="btn primary" data-act="quizdone">Back to the workshop</button>
+    <p>${text}</p>
+    <button class="btn primary" data-act="quizdone">${back}</button>
   </div>`;
 }
 
@@ -278,8 +278,8 @@ export function hangarHTML(G) {
 export function fieldHTML(G, onWater) {
   const s = G.save, ac = G.ac;
   let h = `<div class="hangar">
-    <header><div><h2>${onWater ? 'Afloat' : 'Set down in the open'}</h2><small>No workshop here. Use what you carry.</small></div><div class="money">Kits ${s.kits}</div></header>
-    <section>`;
+    <header><div><h2>${onWater ? 'Afloat' : 'Set down in the open'}</h2><small>No workshop here. Use what you carry, and what you can make.</small></div><div class="money">Kits ${s.kits}</div></header>
+    <section>${G.campNote ? `<p class="${G.campNote.startsWith('Down safely') ? 'okline' : 'warnline'}">${G.campNote}</p>` : ''}`;
   for (const k of PART_KEYS) {
     const v = ac.cond[k];
     h += `<div class="row">
@@ -291,7 +291,13 @@ export function fieldHTML(G, onWater) {
     </div>`;
   }
   h += `<div class="row"><div class="name">Fuel</div><div class="meter">${bar((ac.fuel / G.stats.tank) * 100)}<span>${Math.round(ac.fuel)}</span></div></div>
-    ${ac.fuel < 1 ? '<p class="warnline bad">▲ The tank is dry. You will have to call for help.</p>' : ''}
+    <div class="row"><div class="name">Make fuel</div>
+      <div class="acts"><button class="mini gold" data-act="brew" ${ac.fuel >= G.stats.tank - 1 ? 'disabled' : ''}>Try: +20%</button></div>
+      <p>${G.stats.space ? 'Crack fuel out of ice with the solar still.' : 'Distil something that burns from what is to hand.'} A right answer adds a fifth of a tank.</p></div>
+    <div class="row"><div class="name">Scavenge a repair kit</div>
+      <div class="acts"><button class="mini" data-act="scav" ${s.kits >= s.kitCap ? 'disabled' : ''}>Try: +1 kit</button></div>
+      <p>Make a kit from whatever you can find. A right answer makes one.</p></div>
+    ${ac.fuel < 1 ? '<p class="warnline bad">▲ The tank is dry. Make some fuel here, or call for help.</p>' : ''}
     </section>
     <footer>${ac.fuel < 1 ? '<button class="btn" data-act="tow">Call for help</button>' : '<button class="btn primary" data-act="takeoff">Take off</button>'}
       ${G.surfLabel && ac.fuel >= 1 ? `<button class="btn ghost" data-act="surface">${G.surfLabel}</button>` : ''}</footer>
