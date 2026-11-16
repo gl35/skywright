@@ -43,7 +43,10 @@ export const cruiseRange = (st, fuel) => (fuel / (st.burn * 0.73)) * st.speed * 
 export const repairCost = (id, pts) => Math.ceil(pts * 1.3 * AIRCRAFT[id].tier);
 export const fuelCost = (units) => Math.ceil(units * 0.6);
 export const upCost = (lvl) => UP_COST[lvl];
-export const km = (cells) => Math.round(cells / 10);
+// Odd jobs never run out, so an empty wallet is never a dead end. The first at each stop pays best;
+// after that each pays about a quarter of a full tank for the machine you are flying.
+export const jobPay = (save, st) => (save.shift ? Math.max(25, Math.ceil(fuelCost(st.tank) * 0.25)) : 60);
+export const km =(cells) => Math.round(cells / 10);
 // Height units to something readable: feet low down, kilometres once the sky goes dark.
 export function fmtAlt(a) {
   if (a <= 60) return (Math.round((a * 500) / 100) * 100).toLocaleString('en-US') + ' ft';

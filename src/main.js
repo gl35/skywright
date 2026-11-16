@@ -2,7 +2,7 @@
 
 import './style.css';
 import { WORLDS, AIRCRAFT, PARTS, PART_KEYS, MISSIONS, INTRO, START_SAVE, KIT_COST, KIT_CAP_COST, KIT_CAP_MAX } from './data.js';
-import { calcStats, repairCost, fuelCost, upCost, missionOf, targetOf, thinAir, km } from './rules.js';
+import { calcStats, repairCost, fuelCost, upCost, missionOf, targetOf, thinAir, km, jobPay } from './rules.js';
 import { aircraftModel, buildScenery } from './models.js';
 import { V, resizeView, setCamera, drawScene, screenBearing, cloudsNow, project } from './render.js';
 import { HZ, levelAt, airfieldAt, setWorld, world } from './world.js';
@@ -166,7 +166,7 @@ const actions = {
   },
   kit() { const s = G.save; if (s.kits < s.kitCap && s.money >= KIT_COST) { s.money -= KIT_COST; s.kits++; } },
   kitcap() { const s = G.save; if (s.kitCap < KIT_CAP_MAX && s.money >= KIT_CAP_COST) { s.money -= KIT_CAP_COST; s.kitCap++; } },
-  shift() { const s = G.save; if (!s.shift) { s.shift = true; s.money += 60; } },
+  shift() { const s = G.save; s.money += jobPay(s, G.stats); s.shift = (+s.shift || 0) + 1; },
   upgrade(k) {
     const s = G.save, lv = s.up[k];
     if (lv >= 3 || s.money < upCost(lv)) return;

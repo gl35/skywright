@@ -1,7 +1,7 @@
 // DOM screens: the flight HUD, the in-flight repair mini-game, story cards and the hangar.
 
 import { WORLDS, AIRCRAFT, UPGRADES, PARTS, PART_KEYS, MISSIONS, INTRO, EPILOGUE, KIT_COST, KIT_CAP_COST, KIT_CAP_MAX, BIOMES } from './data.js';
-import { calcStats, cruiseRange, repairCost, fuelCost, upCost, missionDist, targetOf, km, fmtAlt } from './rules.js';
+import { calcStats, cruiseRange, repairCost, fuelCost, upCost, missionDist, targetOf, km, fmtAlt, jobPay } from './rules.js';
 
 const $ = (id) => document.getElementById(id);
 export const el = {};
@@ -152,8 +152,8 @@ function workshop(G) {
   </div>
   <div class="row">
     <div class="name">Short of cash?</div>
-    <div class="acts"><button class="mini" data-act="shift" ${s.shift ? 'disabled' : ''}>${s.shift ? 'Done' : 'Odd jobs +$60'}</button></div>
-    <p>Mend something for the locals. Once per stop.</p>
+    <div class="acts"><button class="mini" data-act="shift">Odd jobs +$${jobPay(s, st)}</button></div>
+    <p>Mend something for the locals. There is always more work, though the first job pays best.</p>
   </div>`;
   return h;
 }
