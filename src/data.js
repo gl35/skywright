@@ -394,3 +394,23 @@ export const MISSIONS = [
 ];
 
 export const EPILOGUE = 'The logbook has blank pages again. Take the Starling up whenever you like.';
+
+// One optional job on the way for each flight, keyed by mission number.
+// t: how far along the route (0..1). off: how far to one side. type:
+//   low  = pass low over the marker      pass = fly through the marker at any height
+//   land = set down inside the marker    high = climb above `alt` anywhere on the flight
+export const TASKS = {
+  0: { type: 'low', t: 0.5, off: -130, pay: 120, label: 'Drop the newspapers at the lighthouse (fly low over it)', after: 'The bundle lands square on the keeper’s doorstep. He waves his cap.' },
+  1: { type: 'land', water: true, t: 0.45, off: 150, pay: 220, label: 'A fishing boat is in trouble. Land on the water beside it', after: 'You pass the skipper a fuel filter and a flask of tea, and he gets under way.' },
+  2: { type: 'pass', t: 0.5, off: -160, pay: 150, label: 'Check the weather buoy for the Saffron Quay met office', after: 'Readings noted. The glass is falling, as if you needed telling.' },
+  3: { type: 'land', t: 0.55, off: 110, pay: 240, label: 'Set down at the shepherds’ camp with the medicine', after: 'A child is carried out to see the brass insect that brought the doctor’s parcel.' },
+  4: { type: 'high', alt: 34, pay: 200, label: 'Climb above 17,000 ft for the survey photograph', after: 'The whole range lies under your wing, and the shutter clicks.' },
+  5: { type: 'pass', t: 0.4, off: 190, pay: 180, label: 'Overfly the icebreaker and report its position', after: 'A dot of red on the white, with a hundred tiny arms waving.' },
+  6: { type: 'low', t: 0.5, off: -170, pay: 220, label: 'Drop the sensor into the smoking crater (fly low over it)', after: 'The canister tumbles into the steam. The observatory radio crackles its thanks.' },
+  7: { type: 'high', alt: 80, pay: 250, label: 'Climb until the sky is black and look for the road', after: 'There: a faint straight line on the sea that no chart shows.' },
+  8: { type: 'land', t: 0.5, off: 120, pay: 260, label: 'Set down at the bronze foundry and collect the casting', after: 'Two sisters in leather aprons load a bronze dragon head, still warm.' },
+  9: { type: 'pass', t: 0.45, off: -140, pay: 200, label: 'Find the survey team’s kite and note its height', after: 'A silk kite carrying a plumb line and a very small, very brave monk’s notebook.' },
+  10: { type: 'low', t: 0.5, off: 150, pay: 220, label: 'Scatter the printed handbills over the river town (fly low)', after: 'A thousand sheets of movable type flutter down onto the market.' },
+  11: { type: 'land', water: true, t: 0.5, off: -150, pay: 260, label: 'Come down beside the timber rafts and take on teak', after: 'The raftsmen pole the logs alongside and roar with laughter at your paddle wheels.' },
+  12: { type: 'high', alt: 175, pay: 300, label: 'Reach orbit: climb above 100 km', after: 'The engines fall quiet. You are falling round the world.' },
+};

@@ -1,7 +1,7 @@
 // Drawing. Everything is a stack of flat sprites: for a point at world (x, y) and height z,
 // the screen position is the rotated, vertically squashed (x, y) moved up the screen by z.
 
-import { CH, HZ, TS, TP, getChunk, beginFrame, cloudsAround, biomeParams, levelAt, world } from './world.js';
+import { CH, CELL, HZ, TS, TP, getChunk, beginFrame, cloudsAround, biomeParams, levelAt, world } from './world.js';
 import { hash2 } from './noise.js';
 import { ROLL_STEPS } from './models.js';
 import { animalsAround } from './wildlife.js';
@@ -12,13 +12,27 @@ export const V = {
   camx: 0, camy: 0, rot: 0, zoom: 2.6, c: 1, s: 0, cx: 160, cy: 240,
 };
 
-// Draw at a reduced resolution and let CSS scale it up: chunky pixels, and far fewer to fill.
-// The size is a whole-number fraction of the screen's real pixels so every game pixel is the same size.
+// The picture is drawn at a whole-number fraction of the screen's real pixels and scaled up by CSS.
+// V.q says how much finer that is than the original chunky look (1 = chunky), and sizes such as
+// zoom and line widths follow it. `coarser` steps the resolution down on machines that cannot keep up.
+let U = 1; // width of a "one pixel" detail at the current resolution
+let coarser = 0;
 export function resizeView(canvas) {
   const w = window.innerWidth, h = window.innerHeight, dpr = window.devicePixelRatio || 1;
-  const n = Math.max(1, Math.round((Math.min(w, h) * dpr) / (w < h ? 290 : 400)));
+  const base = w < h ? 290 : 400;
+  const n = Math.max(1, Math.round((Math.min(w, h) * dpr) / (base * 2.2)) + coarser);
   V.W = canvas.width = Math.ceil((w * dpr) / n);
   V.H = canvas.height = Math.ceil((h * dpr) / n);
+  V.q = Math.min(V.W, V.H) / base;
+  U = Math.max(1, Math.round(V.q));
+}
+let slowT = 0;
+// Call every frame with the frame time. Returns true if it lowered the resolution (the caller should resize).
+export function watchSpeed(dt) {
+  if (dt > 0.2 || document.hidden) return false; // a sleeping tab, not a slow machine
+  slowT = dt > 0.03 ? slowT + dt : Math.max(0, slowT - dt * 2);
+  if (slowT > 2.5 && coarser < 2) { coarser++; slowT = 0; return true; }
+  return false;
 }
 
 // Point the camera at world (x, y), placing a subject flying at `alt` at screen fraction (ax, ay).
@@ -71,8 +85,9 @@ function drawTerrain(ctx, frame, time) {
       if (ch.maxL > maxL) maxL = ch.maxL;
     }
 
-  const a = V.c * V.zoom, b = V.s * V.zoom * V.tilt, c = -V.s * V.zoom, d = V.c * V.zoom * V.tilt;
-  const sub = Math.max(1, Math.ceil((HZ * zs) / 2.4));
+  const zc = V.zoom * CELL; // a terrain tile pixel is one cell
+  const a = V.c * zc, b = V.s * zc * V.tilt, c = -V.s * zc, d = V.c * zc * V.tilt;
+  const sub = Math.max(1, Math.ceil((HZ * zs) / 3));
   for (let k = 0; k <= maxL; k++) {
     // every chunk's filler slices first, then every chunk's top, so a neighbour never paints over a finished top
     for (let s = 1; k > 0 && s < sub; s++) {
@@ -104,19 +119,19 @@ function drawGlints(ctx, time) {
       const h = hash2(gx, gy, 3);
       if (h < 0.45 || ((time * 0.5 + h * 9) % 1) > 0.55) continue;
       const p = project((gx + hash2(gx, gy, 4)) * G, (gy + hash2(gx, gy, 5)) * G, 0);
-      ctx.fillRect(p[0] | 0, p[1] | 0, 3, 1);
+      ctx.fillRect(p[0] | 0, p[1] | 0, 3 * U, U);
     }
 }
 
 // ---------- stacked sprites ----------
 // Draws baked model `m` centred at world (wx, wy), its middle layer at height z, turned to `rot`.
 // lean slides the upper layers back along the heading, which reads as the nose pitching up.
-export function drawStack(ctx, m, wx, wy, z, rot, vs, lean = 0) {
+export function drawStack(ctx, m, wx, wy, z, rot, vs, lean = 0, maxSub = 9) {
   const ang = V.rot + rot, k = vs * V.zoom;
   const ca = Math.cos(ang) * k, sa = Math.sin(ang) * k;
   const p = project(wx, wy, 0), px = p[0], py = p[1];
   const step = k * V.elev;
-  const sub = Math.max(1, Math.ceil(step / 1.6));
+  const sub = Math.min(maxSub, Math.max(1, Math.ceil(step / 1.6)));
   for (let i = 0; i < m.nz; i++) {
     for (let s = 0; s < sub; s++) {
       const h = i - m.cz + s / sub, sl = -h * lean;
@@ -155,7 +170,7 @@ function drawPlane(ctx, pl, model, time) {
     const q = project(pl.x, pl.y, pl.alt);
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.strokeStyle = `rgba(140,240,255,${0.5 + 0.3 * Math.sin(time * 20)})`;
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 2 * U;
     ctx.beginPath(); ctx.ellipse(q[0], q[1], model.nx * model.vs * V.zoom * 0.62, model.nx * model.vs * V.zoom * 0.45, 0, 0, 6.283); ctx.stroke();
   }
   ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -168,7 +183,7 @@ function drawPlane(ctx, pl, model, time) {
         const a = pl.spin + b * (fast ? 0.63 : 1.57);
         for (let r = -pr.r; r <= pr.r; r += 0.8) {
           const p = planePoint(pl, (pr.x - mx) * vs, (pr.y + Math.cos(a) * r) * vs, (pr.z - mz + Math.sin(a) * r) * vs);
-          ctx.fillRect(p[0] | 0, p[1] | 0, 1, 1);
+          ctx.fillRect(p[0] | 0, p[1] | 0, U, U);
         }
       }
     }
@@ -180,14 +195,14 @@ function drawPlane(ctx, pl, model, time) {
         const w = i < len * 0.5 ? 1 : 0;
         const p = planePoint(pl, (j.x - mx - 1 - i) * vs, j.y * vs, (j.z - mz) * vs);
         ctx.fillStyle = i < len * 0.3 ? '#fff6c8' : i < len * 0.65 ? '#ffb347' : '#ff6a2a';
-        ctx.fillRect((p[0] | 0) - w, (p[1] | 0) - w, 1 + w * 2, 1 + w * 2);
+        ctx.fillRect((p[0] | 0) - w * U, (p[1] | 0) - w * U, (1 + w * 2) * U, (1 + w * 2) * U);
       }
     }
   }
 }
 
 function drawTrail(ctx, pl, time) {
-  ctx.lineWidth = 1;
+  ctx.lineWidth = U;
   for (const tr of pl.trails) {
     for (let i = 1; i < tr.length; i++) {
       const a = tr[i - 1], b = tr[i];
@@ -210,7 +225,7 @@ function drawStreaks(ctx, pl, frac) {
   while (motes.length < 26) motes.push({ x: 1e9, y: 0, z: 0 });
   const len = Math.min(60, pl.speed * 0.11);
   ctx.strokeStyle = `rgba(255,255,255,${alpha})`;
-  ctx.lineWidth = 1;
+  ctx.lineWidth = U;
   ctx.beginPath();
   for (const m of motes) {
     const dx = m.x - pl.x, dy = m.y - pl.y;
@@ -224,6 +239,38 @@ function drawStreaks(ctx, pl, frac) {
     ctx.moveTo(x0, y0); ctx.lineTo(P[0], P[1]);
   }
   ctx.stroke();
+}
+
+// Things to aim for: the job marker (a ring on the ground with a beam) and the sparks to collect.
+function drawMarks(ctx, marks, time) {
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  const diamond = (x, y, s) => { ctx.beginPath(); ctx.moveTo(x, y - s); ctx.lineTo(x + s, y); ctx.lineTo(x, y + s); ctx.lineTo(x - s, y); ctx.fill(); };
+  for (const k of marks) {
+    if (k.kind === 'task') {
+      ctx.lineWidth = 2 * U; ctx.strokeStyle = 'rgba(255,214,74,0.9)';
+      ctx.beginPath();
+      for (let i = 0; i < 32; i += 2) {
+        const a0 = (i / 32) * 6.283 + time * 0.3, a1 = ((i + 1) / 32) * 6.283 + time * 0.3;
+        let p = project(k.x + Math.cos(a0) * k.r, k.y + Math.sin(a0) * k.r, k.gz); ctx.moveTo(p[0], p[1]);
+        p = project(k.x + Math.cos(a1) * k.r, k.y + Math.sin(a1) * k.r, k.gz); ctx.lineTo(p[0], p[1]);
+      }
+      ctx.stroke();
+      let p = project(k.x, k.y, k.gz);
+      const x0 = p[0], y0 = p[1];
+      p = project(k.x, k.y, k.gz + 40);
+      ctx.strokeStyle = 'rgba(255,214,74,0.35)'; ctx.lineWidth = 3 * U;
+      ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(p[0], p[1]); ctx.stroke();
+      ctx.fillStyle = '#ffd24a'; diamond(p[0], p[1], (4 + Math.sin(time * 4)) * U);
+    } else {
+      const g = project(k.x, k.y, k.gz), gx = g[0], gy = g[1];
+      const p = project(k.x, k.y, k.z + Math.sin(time * 3 + k.x) * 0.6);
+      ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fillRect(gx - U, gy, 3 * U, U);
+      ctx.strokeStyle = 'rgba(255,240,170,0.16)'; ctx.lineWidth = U;
+      ctx.beginPath(); ctx.moveTo(gx, gy); ctx.lineTo(p[0], p[1]); ctx.stroke();
+      ctx.fillStyle = '#ffe98a'; diamond(p[0], p[1], (3 + Math.sin(time * 6 + k.y) * 0.9) * U);
+      ctx.fillStyle = '#ffffff'; ctx.fillRect(p[0] - U / 2, p[1] - U / 2, U, U);
+    }
+  }
 }
 
 const cloudList = [], beasts = [];
@@ -264,7 +311,7 @@ export function drawScene(ctx, scene) {
       ctx.fillStyle = '#ffffff';
       for (let k = 0; k < 6; k++) {
         const p = project(e.x + Math.cos(e.rot) * 5, e.y + Math.sin(e.rot) * 5, 1.5 + k * 1.1);
-        ctx.fillRect((p[0] | 0) + ((k * 7) % 5) - 2, p[1] | 0, 2, 2);
+        ctx.fillRect((p[0] | 0) + (((k * 7) % 5) - 2) * U, p[1] | 0, 2 * U, 2 * U);
       }
     }
   }
@@ -278,7 +325,7 @@ export function drawScene(ctx, scene) {
   // shadows on the ground
   for (const c of cloudList) {
     const set = setOf(c);
-    drawShadow(ctx, set[c.variant % set.length], c.wx + 6, c.wy + 4, 0, c.rot, c.vs, c.storm ? 0.3 : 0.16);
+    drawShadow(ctx, set[c.variant % set.length], c.wx + 6, c.wy + 4, 0, c.rot, c.vs / 2, c.storm ? 0.3 : 0.16);
   }
   if (scene.showPlane) {
     const ground = levelAt(pl.x, pl.y) * HZ;
@@ -291,18 +338,19 @@ export function drawScene(ctx, scene) {
     const m = set[c.variant % set.length];
     const near = Math.hypot(c.wx - pl.x, c.wy - pl.y) < c.rad * 1.5;
     ctx.globalAlpha = above && near ? 0.45 : c.storm ? 0.96 : 0.9;
-    drawStack(ctx, m, c.wx, c.wy, c.alt + m.cz * c.vs, c.rot, c.vs);
+    drawStack(ctx, m, c.wx, c.wy, c.alt + (m.cz * c.vs) / 2, c.rot, c.vs / 2, 0, 2);
     ctx.globalAlpha = 1;
   };
   for (const c of cloudList) if (!scene.showPlane || c.alt <= pl.alt) drawCloud(c, false);
   ctx.setTransform(1, 0, 0, 1, 0, 0);
 
+  if (scene.marks && scene.marks.length) drawMarks(ctx, scene.marks, time);
   drawStreaks(ctx, pl, scene.speedFrac || 0);
   if (scene.showPlane) {
     drawTrail(ctx, pl, time);
     for (const pf of scene.puffs) {
       const p = project(pf.x, pf.y, pf.z);
-      const s = 1 + pf.age * 3.5;
+      const s = (1 + pf.age * 3.5) * U;
       ctx.fillStyle = `rgba(${pf.dark ? '40,40,46' : '255,180,80'},${Math.max(0, 0.6 - pf.age * 0.5)})`;
       ctx.fillRect(p[0] - s / 2, p[1] - s / 2, s, s);
     }
@@ -324,18 +372,19 @@ export function drawScene(ctx, scene) {
       for (let i = 0; i < 60; i++) {
         const tw = 0.5 + 0.5 * Math.sin(time * 2 + i * 1.7);
         ctx.fillStyle = `rgba(255,255,255,${d * a * (0.4 + 0.6 * tw)})`;
-        ctx.fillRect((hash2(i, 1, 77) * V.W) | 0, (hash2(i, 2, 77) * hgt * 0.62) | 0, 1, 1);
+        ctx.fillRect((hash2(i, 1, 77) * V.W) | 0, (hash2(i, 2, 77) * hgt * 0.62) | 0, U, U);
       }
     }
   }
 
   if (scene.inStorm) { // rain, or blowing dust
     const dusty = w.id === 'mars';
+    ctx.lineWidth = U;
     ctx.strokeStyle = dusty ? 'rgba(240,200,150,0.4)' : 'rgba(200,215,255,0.35)';
     ctx.beginPath();
     for (let i = 0; i < 60; i++) {
       const x = ((hash2(i, frame >> 1, 9) * 1.3 - 0.15) * V.W) | 0, y = (hash2(i, frame >> 1, 10) * V.H) | 0;
-      ctx.moveTo(x, y); ctx.lineTo(x - (dusty ? 12 : 4), y + (dusty ? 2 : 10));
+      ctx.moveTo(x, y); ctx.lineTo(x - (dusty ? 12 : 4) * U, y + (dusty ? 2 : 10) * U);
     }
     ctx.stroke();
     ctx.fillStyle = dusty ? 'rgba(120,60,30,0.25)' : 'rgba(20,24,44,0.22)';

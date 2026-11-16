@@ -16,6 +16,7 @@ function dial(ctx, x, y, r, frac, col) {
 
 // o: { speed, alt, fuel (each 0..1), roll, vz (-1..1), time, prop, nose (css colour) }
 export function drawCockpit(ctx, W, H, o) {
+  const U = Math.max(1, Math.round(Math.min(W, H) / 400));
   const ph = Math.round(H * (W > H ? 0.34 : 0.26)), top = H - ph;
   ctx.setTransform(1, 0, 0, 1, 0, 0);
 
@@ -25,7 +26,7 @@ export function drawCockpit(ctx, W, H, o) {
   ctx.fillStyle = 'rgba(0,0,0,0.25)';
   ctx.beginPath(); ctx.ellipse(W / 2, top + 9, W * 0.15, H * 0.05, 0, 0, 6.283); ctx.fill();
   if (o.prop) {
-    ctx.strokeStyle = 'rgba(30,30,38,0.35)'; ctx.lineWidth = 2;
+    ctx.strokeStyle = 'rgba(30,30,38,0.35)'; ctx.lineWidth = 2 * U;
     for (let b = 0; b < 3; b++) {
       const a = o.time * 33 + b * 1.05, rx = W * 0.2 * Math.cos(a), ry = H * 0.09 * Math.sin(a);
       ctx.beginPath(); ctx.moveTo(W / 2 - rx, top - H * 0.04 - ry); ctx.lineTo(W / 2 + rx, top - H * 0.04 + ry); ctx.stroke();
@@ -33,7 +34,7 @@ export function drawCockpit(ctx, W, H, o) {
   }
 
   // canopy frame
-  ctx.strokeStyle = '#232735'; ctx.lineWidth = 4;
+  ctx.strokeStyle = '#232735'; ctx.lineWidth = 4 * U;
   ctx.beginPath();
   ctx.moveTo(-2, H * 0.1); ctx.lineTo(W * 0.16, top + 6);
   ctx.moveTo(W + 2, H * 0.1); ctx.lineTo(W * 0.84, top + 6);
@@ -44,7 +45,7 @@ export function drawCockpit(ctx, W, H, o) {
   ctx.beginPath();
   ctx.moveTo(0, H); ctx.lineTo(0, top + 10); ctx.quadraticCurveTo(W / 2, top - 8, W, top + 10); ctx.lineTo(W, H);
   ctx.fill();
-  ctx.strokeStyle = '#4b5168'; ctx.lineWidth = 2;
+  ctx.strokeStyle = '#4b5168'; ctx.lineWidth = 2 * U;
   ctx.beginPath(); ctx.moveTo(0, top + 10); ctx.quadraticCurveTo(W / 2, top - 8, W, top + 10); ctx.stroke();
 
   const r = Math.max(8, Math.min(ph * 0.3, W * 0.1));

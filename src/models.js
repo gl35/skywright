@@ -286,7 +286,7 @@ const CLOUDS = {
   violet: [0x3a2466, 0x51338a, 0x6b47ad, 0x8a63cc],
 };
 function cloud(rng, cols) {
-  const v = new Vox(34, 34, 9);
+  const v = new Vox(34, 34, 9, 2); // twice as fine as its design grid, so clouds are soft rather than blocky
   const n = 4 + Math.floor(rng() * 4);
   for (let i = 0; i < n; i++) {
     const a = rng() * 6.283, d = rng() * 9, r = 4 + rng() * 5;

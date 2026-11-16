@@ -1,12 +1,13 @@
 // Skywright: game state, flight model and the main loop.
 
 import './style.css';
-import { WORLDS, AIRCRAFT, PARTS, PART_KEYS, MISSIONS, INTRO, START_SAVE, KIT_COST, KIT_CAP_COST, KIT_CAP_MAX } from './data.js';
+import { TASKS, WORLDS, AIRCRAFT, PARTS, PART_KEYS, MISSIONS, INTRO, START_SAVE, KIT_COST, KIT_CAP_COST, KIT_CAP_MAX } from './data.js';
 import { calcStats, repairCost, fuelCost, upCost, missionOf, targetOf, thinAir, km, jobPay } from './rules.js';
 import { aircraftModel, buildScenery } from './models.js';
-import { V, resizeView, setCamera, drawScene, screenBearing, cloudsNow, project } from './render.js';
+import { V, resizeView, watchSpeed, setCamera, drawScene, screenBearing, cloudsNow, project } from './render.js';
 import { HZ, levelAt, airfieldAt, setWorld, world } from './world.js';
-import { input, initInput, pollInput } from './input.js';
+import { input, initInput, pollInput, settings, toggleStick } from './input.js';
+import { makeQuestion } from './quiz.js';
 import * as ui from './ui.js';
 import { initAudio, setEngine, beep, thud, toggleMute, setMood, toggleMusic, musicIsOn, audioDebug } from './audio.js';
 import { clamp, lerp } from './noise.js';
@@ -41,6 +42,7 @@ const G = {
   tab: 'workshop', legTime: 0, timer: 0, landing: null, onWater: false,
   transited: false, burnT: 0,
   abil: { t: 0, cd: 0 }, surfLabel: '',
+  quiz: null, task: null, sparks: [], chain: 0, bonus: { sparks: 0, cash: 0, task: 0 },
   cards: [], afterCards: null,
   view: 0, sky: 0, heat: 0,
   camRot: -Math.PI / 2, zoom: 3 * ZK, ax: 0.5, ay: 0.7, trailT: 0, puffT: 0, hudT: 0, hintT: 0,
@@ -168,7 +170,17 @@ const actions = {
   },
   kit() { const s = G.save; if (s.kits < s.kitCap && s.money >= KIT_COST) { s.money -= KIT_COST; s.kits++; } },
   kitcap() { const s = G.save; if (s.kitCap < KIT_CAP_MAX && s.money >= KIT_CAP_COST) { s.money -= KIT_CAP_COST; s.kitCap++; } },
-  shift() { const s = G.save; s.money += jobPay(s, G.stats); s.shift = (+s.shift || 0) + 1; },
+  shift() { // an odd job is a question: answer it right to be paid
+    G.quiz = makeQuestion();
+    ui.showPanel(ui.quizHTML(G.quiz, jobPay(G.save, G.stats)));
+  },
+  answer(i) {
+    const q = G.quiz, s = G.save, ok = +i === q.answer, pay = jobPay(s, G.stats);
+    if (ok) { s.money += pay; s.shift = (+s.shift || 0) + 1; beep(880, 0.1); setTimeout(() => beep(1180, 0.14), 90); }
+    else beep(150, 0.25, 'sawtooth');
+    ui.showPanel(ui.quizResultHTML(q, ok, pay));
+  },
+  quizdone() { G.quiz = null; },
   upgrade(k) {
     const s = G.save, lv = s.up[k];
     if (lv >= 3 || s.money < upCost(lv)) return;
@@ -198,6 +210,7 @@ const actions = {
       const st = world().stops[G.mission.from];
       p.x = st.x - 20; p.y = st.y; p.heading = 0;
       G.legTime = 0; G.transited = false; G.burnT = 0;
+      planExtras();
     }
     p.speed = 0; p.vz = 0; p.roll = 0;
     G.takeoffFrom = { x: p.x, y: p.y };
@@ -210,8 +223,8 @@ const actions = {
       s.seen.controls = true;
       G.hintT = 10;
       ui.setHint(isTouch
-        ? 'Drag left or right to steer.<br>Drag up to climb, down to descend.<br>The slider on the right is the throttle.<br>VIEW changes the camera.<br><br>Drag up to take off. Follow the arrow to the<br>next field and descend onto the runway to land.'
-        : 'A / D or arrows: steer<br>W / S: climb and descend<br>Q / E: throttle &nbsp; Space: fix a breakdown<br>V: change view &nbsp; N: music &nbsp; X: special move<br><br>Pull up to take off. Follow the arrow to the<br>next field and descend onto the runway to land.');
+        ? `Drag left or right to steer.<br>${settings.realStick ? 'Drag down to climb, up to descend, like a real stick.' : 'Drag up to climb, down to descend.'}<br>` + 'The slider on the right is the throttle.<br>VIEW changes the camera.<br><br>PULL = CLIMB at the top left swaps that.<br>Follow the arrow to the<br>next field and descend onto the runway to land.'
+        : `A / D or arrows: steer<br>${settings.realStick ? 'S: pull back to climb &nbsp; W: push to descend' : 'W: climb &nbsp; S: descend'}<br>` + 'Q / E: throttle &nbsp; Space: fix a breakdown<br>V: change view &nbsp; N: music &nbsp; X: special move<br><br>Pull back to take off (I swaps the stick). Follow the arrow to the<br>next field and descend onto the runway to land.');
     }
   },
 };
@@ -220,8 +233,72 @@ ui.el.panel.addEventListener('click', (e) => {
   if (!b || b.disabled) return;
   const before = G.mode;
   actions[b.dataset.act]?.(b.dataset.arg);
-  if (G.mode === before && (G.mode === 'hangar' || G.mode === 'field')) { persist(); refresh(); }
+  if (G.mode === before && (G.mode === 'hangar' || G.mode === 'field')) { persist(); if (!G.quiz) refresh(); }
 });
+
+// ---------- things to do on the way ----------
+// Look outward from (x, y) for the nearest spot the test accepts.
+function findSpot(x, y, ok) {
+  for (let r = 0; r <= 260; r += 13)
+    for (let a = 0; a < 6.283; a += 0.52) {
+      const px = x + Math.cos(a) * r, py = y + Math.sin(a) * r;
+      if (ok(px, py)) return { x: px, y: py };
+      if (r === 0) break;
+    }
+  return { x, y };
+}
+// Called at take-off: place this flight's job marker and a trail of sparks that weaves and changes height.
+function planExtras() {
+  const m = G.mission, st = G.stats;
+  G.task = null; G.sparks = []; G.chain = 0; G.bonus = { sparks: 0, cash: 0, task: 0 };
+  if (m.free || m.transit) { // nothing to place off-route, but a climbing job still makes sense
+    const T = TASKS[G.save.mission];
+    if (T && T.type === 'high' && !m.free) G.task = { ...T, done: false };
+    return;
+  }
+  const S = world().stops, A = S[m.from], B = S[m.to];
+  const dx = B.x - A.x, dy = B.y - A.y, len = Math.hypot(dx, dy), ux = dx / len, uy = dy / len;
+  const T = TASKS[G.save.mission];
+  if (T) {
+    if (T.type === 'high') G.task = { ...T, done: false };
+    else {
+      const wet = (x, y) => !levelAt(x, y) && !levelAt(x + 9, y) && !levelAt(x - 9, y) && !levelAt(x, y + 9) && !levelAt(x, y - 9);
+      const dry = (x, y) => { const l = levelAt(x, y); return l >= 2 && l <= 3 && levelAt(x + 6, y) === l && levelAt(x - 6, y) === l; };
+      const any = (x, y) => levelAt(x, y) >= 1;
+      const at = findSpot(A.x + dx * T.t - uy * T.off, A.y + dy * T.t + ux * T.off, T.type === 'land' ? (T.water ? wet : dry) : any);
+      G.task = { ...T, x: at.x, y: at.y, r: T.type === 'land' ? 26 : 22, gz: levelAt(at.x, at.y) * HZ, kind: 'task', done: false };
+    }
+  }
+  const n = Math.floor(len / 110);
+  for (let i = 1; i <= n; i++) {
+    const t = i / (n + 1);
+    if (t < 0.07 || t > 0.93) continue;
+    const side = Math.sin(t * Math.PI * 3) * 65;
+    const x = A.x + dx * t - uy * side, y = A.y + dy * t + ux * side, gz = levelAt(x, y) * HZ;
+    G.sparks.push({ kind: 'spark', x, y, gz, z: Math.min(st.ceil - 2, gz + 9 + ((i * 7) % 3) * 5), got: false });
+  }
+}
+function finishTask() {
+  const t = G.task;
+  t.done = true;
+  G.save.money += t.pay; G.bonus.task += t.pay;
+  beep(660, 0.1); setTimeout(() => beep(880, 0.1), 100); setTimeout(() => beep(1320, 0.2), 200);
+}
+// Checked every moment in the air.
+function checkExtras(p, floor) {
+  for (const k of G.sparks) {
+    if (k.got || Math.abs(k.x - p.x) > 7 || Math.abs(k.y - p.y) > 7 || Math.abs(k.z - p.alt) > 5) continue;
+    k.got = true;
+    const pay = 10 + Math.min(10, G.chain) * 2; // a run of them is worth more
+    G.save.money += pay; G.bonus.sparks++; G.bonus.cash += pay; G.chain++;
+    beep(700 + Math.min(10, G.chain) * 70, 0.09, 'triangle', 0.14);
+  }
+  const t = G.task;
+  if (!t || t.done || t.type === 'land') return;
+  const near = t.type === 'high' || Math.hypot(t.x - p.x, t.y - p.y) < t.r;
+  const ok = t.type === 'high' ? p.alt > t.alt : t.type === 'low' ? near && p.alt - floor < 9 : near;
+  if (ok) { finishTask(); ui.setHint(`<b>Done.</b> ${t.after}<br>+$${t.pay}`); G.hintT = 6; }
+}
 
 // ---------- in-flight repair ----------
 function tryFix() {
@@ -276,7 +353,7 @@ function updateTakeoff(dt) {
   else p.vz = onGround ? 0 : lerp(p.vz, -1.5, Math.min(1, dt * 2));
   p.alt = Math.max(floor, p.alt + p.vz * dt);
   p.lean = lerp(p.lean, p.alt > floor ? 0.5 : 0, Math.min(1, dt * 3));
-  const up = isTouch ? 'drag up' : 'W or the up arrow';
+  const up = settings.realStick ? (isTouch ? 'drag down, like pulling a stick back' : 'S or the down arrow, like pulling a stick back') : isTouch ? 'drag up' : 'W or the up arrow';
   if (p.throttle < 0.3 && !st.hover) ui.setAlert('Open the throttle to start the take-off run', true);
   else if (!ready) ui.setAlert('Gathering speed', true);
   else if (onGround) ui.setAlert(`Pull up to take off: ${up}`, true);
@@ -358,6 +435,8 @@ function updateFlight(dt) {
   p.y += Math.sin(p.heading) * p.speed * dt;
 
   if (!dead) ac.fuel = Math.max(0, ac.fuel - st.burn * (0.25 + 0.75 * p.throttle * p.throttle) * (f.fuel ? 4 : 1) * (orbiting ? 0.1 : 1) * (ab === 'lean' ? 0.33 : ab === 'burner' ? 3 : ab === 'zoom' ? 2 : 1) * dt);
+
+  checkExtras(p, levelAt(p.x, p.y) * HZ + G.belly);
 
   // wear and tear
   const w = st.wear * dt;
@@ -455,6 +534,10 @@ function completeMission() {
   s.money += m.pay;
   s.mission++; s.shift = false;
   const body = m.arrive.slice();
+  const extra = [];
+  if (G.bonus.task) extra.push(`the job on the way ($${G.bonus.task})`);
+  if (G.bonus.sparks) extra.push(`${G.bonus.sparks} of ${G.sparks.length} sparks ($${G.bonus.cash})`);
+  if (extra.length) body.push(`Along the way: ${extra.join(' and ')}.`);
   if (m.pay) body.push(`<b>You are paid $${m.pay}.</b>${hard ? ' You came in fast and hard, and the airframe took a knock. Ease the throttle back before you touch down.' : ''}`);
   const cards = [{ title: m.title, body, note: m.real }];
   const next = MISSIONS[s.mission];
@@ -465,7 +548,12 @@ function completeMission() {
 
 // Stopped somewhere that is not a landing ground: open the camp screen (repairs from kits, take off, or move on).
 function makeCamp(onWater) {
-  const A = AIRCRAFT[G.mission.craft], lvl = levelAt(G.plane.x, G.plane.y);
+  const A = AIRCRAFT[G.mission.craft], lvl = levelAt(G.plane.x, G.plane.y), t = G.task;
+  if (t && !t.done && t.type === 'land' && Math.hypot(t.x - G.plane.x, t.y - G.plane.y) < t.r + 10) { // you set down where you were needed
+    finishTask();
+    showCards([{ title: 'Job done', body: [t.after, `<b>+$${t.pay}</b>`], btn: 'Carry on' }], () => makeCamp(onWater));
+    return;
+  }
   const wet = lvl === 0 && world().water;
   G.mode = 'field'; G.onWater = onWater || wet;
   G.plane.propSpin = 0; G.plane.speed = 0;
@@ -556,6 +644,16 @@ function updateEffects(dt, airborne) {
 // ---------- main loop ----------
 function angDiff(a, b) { let d = (a - b) % (Math.PI * 2); if (d > Math.PI) d -= Math.PI * 2; if (d < -Math.PI) d += Math.PI * 2; return d; }
 
+const markList = [];
+function marksNear(p) {
+  markList.length = 0;
+  const t = G.task;
+  if (t && !t.done && t.kind && Math.hypot(t.x - p.x, t.y - p.y) < 420) markList.push(t);
+  for (const k of G.sparks) if (!k.got && Math.abs(k.x - p.x) < 300 && Math.abs(k.y - p.y) < 420) markList.push(k);
+  return markList;
+}
+const ARROWS = ['\u2191', '\u2197', '\u2192', '\u2198', '\u2193', '\u2199', '\u2190', '\u2196'];
+
 // One step of game logic, separate from drawing.
 function tick(dt) {
   G.time += dt;
@@ -571,10 +669,11 @@ function tick(dt) {
 }
 
 let last = performance.now();
-function frame(now) {
-  const dt = Math.min(0.05, (now - last) / 1000);
+function frame(now, once) {
+  const raw = (now - last) / 1000, dt = Math.min(0.05, raw);
   last = now;
   G.frame++;
+  if (G.frame > 120 && !once && watchSpeed(raw)) onResize(); // struggling: drop to a coarser picture
   tick(dt);
   const p = G.plane;
 
@@ -601,7 +700,7 @@ function frame(now) {
     if (G.mode === 'cards') tay = wide ? 0.86 : 0.14; // keep the aircraft clear of the card
   }
   const kk = Math.min(1, dt * 2.5);
-  G.zoom = lerp(G.zoom, tz, kk); G.ax = lerp(G.ax, tax, kk); G.ay = lerp(G.ay, tay, kk);
+  G.zoom = lerp(G.zoom, tz * V.q, kk); G.ax = lerp(G.ax, tax, kk); G.ay = lerp(G.ay, tay, kk);
   V.tilt = lerp(V.tilt, vw.tilt, kk); V.elev = lerp(V.elev, vw.elev, kk);
   G.sky = lerp(G.sky, Math.max(vw.sky, dark), kk);
   const cockpit = G.view === 2 && (G.mode === 'takeoff' || G.mode === 'flying' || G.mode === 'rollout');
@@ -614,6 +713,7 @@ function frame(now) {
     time: G.time, frame: G.frame, plane: p, model: G.model, scenery: G.scenery, puffs: G.puffs,
     inStorm: G.mode === 'flying' && (G.inCell || G.underCell), showPlane: !cockpit, budget: G.frame < G.boost ? 40 : 3,
     sky: G.sky, skyH: vw.skyH, dark, speedFrac: airborne ? frac : 0,
+    marks: inFlight ? marksNear(p) : null,
   });
   if (cockpit) { // tip the whole outside world with the bank, then draw the cockpit level on top
     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -636,7 +736,7 @@ function frame(now) {
         if (!c.storm) continue;
         const q = project(c.wx, c.wy, c.alt);
         if (q[0] > 0 && q[0] < V.W && q[1] > 0 && q[1] < V.H) continue;
-        ctx.fillRect(clamp(q[0], 3, V.W - 7) | 0, clamp(q[1], 3, V.H - 7) | 0, 4, 4);
+        ctx.fillRect(clamp(q[0], 3, V.W - 12) | 0, clamp(q[1], 3, V.H - 12) | 0, 4 * V.q, 4 * V.q);
       }
     }
     G.hudT -= dt;
@@ -645,6 +745,13 @@ function frame(now) {
       const d = destStop();
       if (d) ui.updateHud(G, screenBearing(p.x, p.y, d.x, d.y), `${d.name}  ${km(Math.hypot(d.x - p.x, d.y - p.y))} km`, input.throttle);
       else ui.updateHud(G, null, 'Climb to the black sky', input.throttle);
+      const job = G.task && !G.task.done && G.mode !== 'rollout' && G.mode !== 'down' ? G.task : null, O = ui.el.objective;
+      O.classList.toggle('hidden', !job);
+      if (job) {
+        const where = job.kind ? ` ${ARROWS[((Math.round(screenBearing(p.x, p.y, job.x, job.y) / (Math.PI / 4)) % 8) + 8) % 8]} ${km(Math.hypot(job.x - p.x, job.y - p.y))} km` : '';
+        const txt = `\u25c6 ${job.label}${where}`;
+        if (O.textContent !== txt) O.textContent = txt;
+      }
       const ab = AIRCRAFT[G.mission.craft].ability, B = ui.el.abilBtn;
       B.classList.toggle('hidden', G.mode !== 'flying');
       B.classList.toggle('on', G.abil.t > 0); B.classList.toggle('cool', G.abil.t <= 0 && G.abil.cd > 0);
@@ -662,7 +769,7 @@ function frame(now) {
       : wid === 'moon' ? 'moon' : wid === 'mars' ? 'mars' : wid === 'deep' ? 'deep' : 'era';
   setMood(mood, G.mode === 'flying' && (PART_KEYS.some((k) => G.fail[k]) || G.inCell || G.heat > 0.15));
 
-  requestAnimationFrame(frame);
+  if (!once) requestAnimationFrame(frame);
 }
 
 // The machine's special move.
@@ -686,6 +793,11 @@ ui.el.viewBtn.addEventListener('click', nextView);
 const musicBtn = document.getElementById('musicBtn');
 musicBtn.classList.toggle('off', !musicIsOn());
 musicBtn.addEventListener('click', () => { initAudio(); musicBtn.classList.toggle('off', !toggleMusic()); });
+// which way climbs: pull back like a real stick (the default), or push up
+const stickBtn = document.getElementById('stickBtn');
+const stickLabel = () => { stickBtn.textContent = settings.realStick ? 'PULL = CLIMB' : 'PUSH = CLIMB'; };
+stickLabel();
+stickBtn.addEventListener('click', () => { toggleStick(); stickLabel(); beep(600, 0.04); });
 
 // ---------- boot ----------
 G.view = (+localStorage.getItem('skywright.view') || 0) % VIEWS.length;
@@ -695,7 +807,7 @@ window.addEventListener('resize', onResize);
 onResize();
 initInput(canvas, ui.el.throttle, {
   action: tryFix,
-  key: (code) => { if (code === 'KeyM') toggleMute(); if (code === 'KeyN') musicBtn.click(); if (code === 'KeyX') useAbility(); if (code === 'KeyF') tryFix(); if (code === 'KeyV') nextView(); },
+  key: (code) => { if (code === 'KeyM') toggleMute(); if (code === 'KeyN') musicBtn.click(); if (code === 'KeyX') useAbility(); if (code === 'KeyI') stickBtn.click(); if (code === 'KeyF') tryFix(); if (code === 'KeyV') nextView(); },
 });
 G.model = aircraftModel('sparrow');
 G.belly = (G.model.nz * G.model.vs) / 2;
@@ -706,6 +818,7 @@ ui.showPanel(ui.titleHTML(!!G.save));
 window.__sky = {
   G, V, actions, audioDebug,
   sim: (sec) => { for (let t = 0; t < sec; t += 1 / 60) tick(1 / 60); },
+  bench: (n = 20) => { const t = performance.now(); for (let i = 0; i < n; i++) frame(performance.now(), true); return (performance.now() - t) / n; },
   skip: () => { G.landing = { hard: false }; completeMission(); },
 };
 requestAnimationFrame(frame);

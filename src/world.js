@@ -7,10 +7,12 @@
 import { fbm, vnoise, hash2, smoothstep, lerp } from './noise.js';
 import { WORLDS, BIOMES } from './data.js';
 
-export const CH = 48; // cells per chunk side
+export const CELL = 0.5; // world size of one terrain cell: smaller is finer
+export const CH = 48; // world size of a chunk
+const NC = CH / CELL; // cells per chunk side
 export const NL = 12; // height levels 0..11 (0 = water, or dry low ground)
 export const HZ = 2.2; // world height of one level
-export const TS = CH + 1; // tile size in a chunk atlas (one cell of overlap with the next chunk)
+export const TS = NC + 1; // tile size in a chunk atlas (one cell of overlap with the next chunk)
 export const TP = TS + 2; // tile pitch: a clear 1px gutter round each tile stops colours bleeding between tiles
 
 let cur = WORLDS.earth;
@@ -67,7 +69,7 @@ function terrain(x, y, stops) {
 const toLevel = (v, hs) => (v > 0 ? Math.min(NL - 1, 1 + Math.floor(v * hs)) : 0);
 
 export function levelAt(x, y) {
-  terrain(Math.floor(x), Math.floor(y), cur.stops);
+  terrain(Math.floor(x / CELL) * CELL, Math.floor(y / CELL) * CELL, cur.stops);
   return toLevel(outV, outHs);
 }
 
@@ -83,19 +85,22 @@ let genBudget = 0;
 export function beginFrame(budget) { genBudget = budget; }
 
 function genChunk(cx, cy) {
-  const N = CH + 3; // one border cell before, two after: tiles carry one extra row/column so neighbours overlap
+  const N = NC + 3; // one border cell before, two after: tiles carry one extra row/column so neighbours overlap
   const lv = new Uint8Array(N * N), vv = new Float32Array(N * N);
-  const x0 = cx * CH - 1, y0 = cy * CH - 1;
-  const mx = x0 + N / 2, my = y0 + N / 2;
+  const x0 = cx * CH - CELL, y0 = cy * CH - CELL; // world position of the first (border) cell
+  const gx0 = cx * NC - 1, gy0 = cy * NC - 1; // and its whole-number cell index, for the speckle pattern
+  const mx = cx * CH + CH / 2, my = cy * CH + CH / 2;
   const near = cur.stops.filter((s) => Math.abs(s.x - mx) < 165 && Math.abs(s.y - my) < 125);
   for (let iy = 0; iy < N; iy++)
     for (let ix = 0; ix < N; ix++) {
-      terrain(x0 + ix, y0 + iy, near);
+      terrain(x0 + ix * CELL, y0 + iy * CELL, near);
       vv[ix + iy * N] = outV;
       lv[ix + iy * N] = toLevel(outV, outHs);
     }
+  let maxL = 0;
+  for (let i = 0; i < lv.length; i++) if (lv[i] > maxL) maxL = lv[i];
 
-  const W = TP * NL;
+  const W = TP * (maxL + 1); // only as many level tiles as this chunk has
   const canvas = document.createElement('canvas');
   canvas.width = W; canvas.height = TP * 2;
   const ctx = canvas.getContext('2d');
@@ -103,10 +108,9 @@ function genChunk(cx, cy) {
   const D = img.data;
   const land = new Float32Array(NL * 3), side = new Float32Array(NL * 3), water = new Float32Array(12);
   const pad = cur.pad;
-  let maxL = 0;
 
   for (let ix = 0; ix < TS; ix++) {
-    const x = x0 + 1 + ix;
+    const x = x0 + (1 + ix) * CELL;
     mix(x);
     for (let k = 0; k < NL; k++)
       for (let c = 0; c < 3; c++) {
@@ -117,11 +121,10 @@ function genChunk(cx, cy) {
     const trees = (mT < 0.5 ? mA : mB).trees;
 
     for (let iy = 0; iy < TS; iy++) {
-      const y = y0 + 1 + iy;
+      const y = y0 + (1 + iy) * CELL;
       const i = ix + 1 + (iy + 1) * N;
       const L = lv[i];
-      if (L > maxL) maxL = L;
-      const h = hash2(x, y, 7);
+      const h = hash2(gx0 + 1 + ix, gy0 + 1 + iy, 7);
       let r, g, b;
       if (L === 0) {
         const depth = -vv[i] + (h - 0.5) * 0.006;
@@ -141,17 +144,17 @@ function genChunk(cx, cy) {
             const onStrip = Math.abs(dx) <= 22 && Math.abs(dy) <= 2;
             const onApron = dx >= -12 && dx <= 10 && dy >= -13 && dy <= -3;
             if (pad === 'runway') {
-              if (onStrip) { const mark = Math.abs(dx) >= 21 || (dy === 0 && ((dx + 24) & 3) < 2); r = g = b = mark ? 222 : 84 + h * 10; b += 4; }
+              if (onStrip) { const mark = Math.abs(dx) >= 21 || (dy >= -0.5 && dy <= 0 && ((Math.floor(dx) + 24) & 3) < 2); r = g = b = mark ? 222 : 84 + h * 10; b += 4; }
               else if (onApron) { r = 158 + h * 8; g = 160 + h * 8; b = 156 + h * 8; }
             } else if (pad === 'plaza') { // flagstones with a darker border
               if (Math.abs(dx) <= 22 && Math.abs(dy) <= 4) {
-                const edge = Math.abs(dx) === 22 || Math.abs(dy) === 4, joint = (dx & 3) === 0 || (dy & 3) === 0;
+                const edge = Math.abs(dx) >= 21.5 || Math.abs(dy) >= 3.5, joint = (Math.floor(dx * 2) & 7) === 0 || (Math.floor(dy * 2) & 7) === 0;
                 const t = edge ? 120 : joint ? 168 : 190 + h * 14;
                 r = t + 6; g = t; b = t - 12;
               } else if (onApron) { r = 150 + h * 10; g = 132 + h * 10; b = 104 + h * 8; }
             } else if (Math.abs(dx) <= 22 && Math.abs(dy) <= 4) { // 'pad': dark ground with a yellow outline and centre ring
               const d = Math.hypot(dx, dy * 2.5);
-              const mark = Math.abs(dx) === 22 || Math.abs(dy) === 4 || (d > 7 && d < 9);
+              const mark = Math.abs(dx) >= 21.5 || Math.abs(dy) >= 3.5 || (d > 7 && d < 9);
               if (mark) { r = 232; g = 190; b = 60; } else { r = g = b = 58 + h * 10; }
             }
           }
@@ -182,7 +185,7 @@ export function getChunk(cx, cy, frame) {
     genBudget--;
     ch = genChunk(cx, cy);
     chunks.set(key, ch);
-    if (chunks.size > 220) { // drop the chunks we have not drawn for longest
+    if (chunks.size > 150) { // drop the chunks we have not drawn for longest
       const old = [...chunks.entries()].sort((a, b) => a[1].used - b[1].used).slice(0, 60);
       for (const [k] of old) chunks.delete(k);
     }

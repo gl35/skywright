@@ -6,7 +6,7 @@ import { calcStats, cruiseRange, repairCost, fuelCost, upCost, missionDist, targ
 const $ = (id) => document.getElementById(id);
 export const el = {};
 for (const id of ['hud', 'nav', 'navArrow', 'navText', 'alert', 'hint', 'gSpd', 'gAlt', 'gFuel', 'pips', 'throttle', 'thrFill',
-  'viewBtn', 'abilBtn', 'stopBtn', 'fixBtn', 'fixPanel', 'fixTitle', 'fixZone', 'fixMark', 'fixDots', 'fixHit', 'panel', 'flash']) el[id] = $(id);
+  'objective', 'viewBtn', 'abilBtn', 'stopBtn', 'fixBtn', 'fixPanel', 'fixTitle', 'fixZone', 'fixMark', 'fixDots', 'fixHit', 'panel', 'flash']) el[id] = $(id);
 
 const condCls = (v) => (v > 60 ? 'ok' : v > 35 ? 'warn' : 'bad');
 const bar = (pct, cls = '') => `<div class="bar ${cls}"><i style="width:${Math.max(0, Math.min(100, pct))}%"></i></div>`;
@@ -120,6 +120,23 @@ export function cardHTML(c) {
   </div>`;
 }
 
+export function quizHTML(q, pay) {
+  return `<div class="card">
+    <small class="chapter">Odd job · pays $${pay} for the right answer</small>
+    <p>${q.intro}</p>
+    <p class="qq">${q.q}</p>
+    ${q.options.map((o, i) => `<button class="btn opt" data-act="answer" data-arg="${i}">${'ABCD'[i]}. ${o}</button>`).join('')}
+  </div>`;
+}
+export function quizResultHTML(q, ok, pay) {
+  return `<div class="card">
+    <h2 class="${ok ? 'right' : 'wrong'}">${ok ? 'Right' : 'Not quite'}</h2>
+    <p>${q.why}</p>
+    <p>${ok ? `You are paid <b>$${pay}</b>.` : `The answer was <b>${q.right}</b>. No pay this time, but there is always another job.`}</p>
+    <button class="btn primary" data-act="quizdone">Back to the workshop</button>
+  </div>`;
+}
+
 function workshop(G) {
   const s = G.save, ac = G.ac, st = G.stats, id = G.mission.craft;
   const need = st.tank - ac.fuel;
@@ -153,7 +170,7 @@ function workshop(G) {
   <div class="row">
     <div class="name">Short of cash?</div>
     <div class="acts"><button class="mini" data-act="shift">Odd jobs +$${jobPay(s, st)}</button></div>
-    <p>Mend something for the locals. There is always more work, though the first job pays best.</p>
+    <p>The locals pay for a right answer: a sum, a rule of engineering, or a riddle. There is always more work, though the first job pays best.</p>
   </div>`;
   return h;
 }

@@ -3,6 +3,14 @@
 import { clamp } from './noise.js';
 
 export const input = { turn: 0, pitch: 0, throttle: 0.7, action: false };
+// realStick: pull back (down) to climb, like an aeroplane. Off: push up to climb.
+export const settings = { realStick: true };
+try { settings.realStick = localStorage.getItem('skywright.stick') !== 'push'; } catch { /* private mode */ }
+export function toggleStick() {
+  settings.realStick = !settings.realStick;
+  try { localStorage.setItem('skywright.stick', settings.realStick ? 'pull' : 'push'); } catch { /* private mode */ }
+  return settings.realStick;
+}
 const keys = new Set();
 const stick = { id: null, ox: 0, oy: 0, x: 0, y: 0 };
 let onAction = () => {}, onKey = () => {};
@@ -46,7 +54,7 @@ export function pollInput(dt) {
   const kt = (k('ArrowRight') || k('KeyD') ? 1 : 0) - (k('ArrowLeft') || k('KeyA') ? 1 : 0);
   const kp = (k('ArrowUp') || k('KeyW') ? 1 : 0) - (k('ArrowDown') || k('KeyS') ? 1 : 0);
   input.turn = clamp(kt + stick.x, -1, 1);
-  input.pitch = clamp(kp - stick.y, -1, 1);
+  input.pitch = clamp((kp - stick.y) * (settings.realStick ? -1 : 1), -1, 1);
   const th = (k('KeyE') || k('ShiftLeft') ? 1 : 0) - (k('KeyQ') ? 1 : 0);
   if (th) input.throttle = clamp(input.throttle + th * dt * 0.7, 0, 1);
 }

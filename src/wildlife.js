@@ -75,8 +75,8 @@ function build() {
     whale: { f: [whale(0x47627f, 0xb9c8d6)], vs: 0.7 },
     glow: { f: [whale(0x3cbfae, 0xd9fff6)], vs: 0.7 },
     orca: { f: [orca()], vs: 0.55 },
-    gull: { f: [bird(0, 0xf4f5f7, 0x6a6f7a), bird(1, 0xf4f5f7, 0x6a6f7a)], vs: 0.42 },
-    crane: { f: [bird(0, 0xf4f5f7, 0x1c1e26), bird(1, 0xf4f5f7, 0x1c1e26)], vs: 0.5 },
+    gull: { f: [bird(0, 0xf4f5f7, 0x6a6f7a), bird(1, 0xf4f5f7, 0x6a6f7a)], vs: 0.62 },
+    crane: { f: [bird(0, 0xf4f5f7, 0x1c1e26), bird(1, 0xf4f5f7, 0x1c1e26)], vs: 0.72 },
   };
 }
 
@@ -85,7 +85,7 @@ const LAND = {
   temperate: ['sheep', 'deer'], tropical: ['deer'], desert: ['camel'], alpine: ['deer'], arctic: ['penguin'],
   loess: ['horse', 'buffalo'], guanzhong: ['horse', 'buffalo'], plain: ['buffalo', 'horse'], jiangnan: ['buffalo'],
 };
-const BIRDS = { temperate: 'gull', tropical: 'gull', arctic: 'gull', loess: 'crane', guanzhong: 'crane', plain: 'crane', jiangnan: 'crane', alien: 'crane' };
+const BIRDS = { temperate: 'gull', tropical: 'gull', arctic: 'gull', desert: 'gull', alpine: 'gull', volcanic: 'gull', loess: 'crane', guanzhong: 'crane', plain: 'crane', jiangnan: 'crane', alien: 'crane' };
 
 function cellOf(gx, gy) {
   const w = world(), key = w.id + ':' + gx + ',' + gy;
@@ -106,8 +106,8 @@ function cellOf(gx, gy) {
     const kinds = LAND[b];
     c.push({ type: 'herd', kind: kinds[Math.floor(hash2(gx, gy, 106) * kinds.length)], n: 3 + Math.floor(hash2(gx, gy, 107) * 4), x, y, ph, scare: 0, away: 0 });
   }
-  if (BIRDS[b] && hash2(gx, gy, 102) < 0.14) {
-    c.push({ type: 'flock', kind: BIRDS[b], n: 5, x, y, ph, alt: lvl * HZ + 7 + hash2(gx, gy, 108) * 7, dir: hash2(gx, gy, 109) < 0.5 ? 1 : -1 });
+  if (BIRDS[b] && hash2(gx, gy, 102) < 0.34) {
+    c.push({ type: 'flock', kind: BIRDS[b], n: 5 + Math.floor(hash2(gx, gy, 110) * 5), x, y, ph, alt: lvl * HZ + 7 + hash2(gx, gy, 108) * 7, dir: hash2(gx, gy, 109) < 0.5 ? 1 : -1 });
   }
   if (cache.size > 500) cache.clear();
   cache.set(key, c);
