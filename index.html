@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="theme-color" content="#1f5fae" />
+  <title>Skywright</title>
+  <script type="module" crossorigin src="./assets/index-LCOIK4P0.js"></script>
+  <link rel="stylesheet" crossorigin href="./assets/index-BOfUj2VK.css">
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <div id="hud" class="hidden">
+    <div id="nav"><div id="navArrow"></div><div id="navText"></div></div>
+    <div id="alert" class="hidden"></div>
+    <div id="hint" class="hidden"></div>
+    <div id="gauges">
+      <div class="g"><label>SPD</label><b id="gSpd">0</b></div>
+      <div class="g"><label>ALT</label><b id="gAlt">0</b></div>
+      <div class="g wide"><label>FUEL</label><div class="bar"><i id="gFuel"></i></div></div>
+      <div id="pips"></div>
+    </div>
+    <div id="throttle"><div id="thrFill"></div><span>THR</span></div>
+    <button id="viewBtn">VIEW</button>
+    <button id="fixBtn" class="hidden">FIX</button>
+    <div id="fixPanel" class="hidden">
+      <div id="fixTitle"></div>
+      <div id="fixTrack"><div id="fixZone"></div><div id="fixMark"></div></div>
+      <div id="fixDots"></div>
+      <button id="fixHit">TIGHTEN</button>
+    </div>
+  </div>
+
+  <div id="panel" class="hidden"></div>
+  <div id="flash"></div>
+</body>
+</html>
