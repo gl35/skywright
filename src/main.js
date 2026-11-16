@@ -8,7 +8,7 @@ import { V, resizeView, setCamera, drawScene, screenBearing, cloudsNow, project 
 import { HZ, levelAt, airfieldAt, setWorld, world } from './world.js';
 import { input, initInput, pollInput } from './input.js';
 import * as ui from './ui.js';
-import { initAudio, setEngine, beep, thud, toggleMute } from './audio.js';
+import { initAudio, setEngine, beep, thud, toggleMute, setMood, toggleMusic, musicIsOn, audioDebug } from './audio.js';
 import { clamp, lerp } from './noise.js';
 import { drawCockpit } from './cockpit.js';
 
@@ -193,6 +193,7 @@ const actions = {
       G.legTime = 0; G.transited = false; G.burnT = 0;
     }
     p.speed = 0; p.vz = 0; p.roll = 0;
+    G.takeoffFrom = { x: p.x, y: p.y };
     input.throttle = 0.85;
     G.mode = 'takeoff';
     persist();
@@ -202,8 +203,8 @@ const actions = {
       s.seen.controls = true;
       G.hintT = 10;
       ui.setHint(isTouch
-        ? 'Drag left or right to steer.<br>Drag up to climb, down to descend.<br>The slider on the right is the throttle.<br>VIEW changes the camera.<br><br>Follow the arrow to the next field and<br>descend onto the runway to land.'
-        : 'A / D or arrows: steer<br>W / S: climb and descend<br>Q / E: throttle &nbsp; Space: fix a breakdown<br>V: change view<br><br>Follow the arrow to the next field and<br>descend onto the runway to land.');
+        ? 'Drag left or right to steer.<br>Drag up to climb, down to descend.<br>The slider on the right is the throttle.<br>VIEW changes the camera.<br><br>Drag up to take off. Follow the arrow to the<br>next field and descend onto the runway to land.'
+        : 'A / D or arrows: steer<br>W / S: climb and descend<br>Q / E: throttle &nbsp; Space: fix a breakdown<br>V: change view &nbsp; N: music<br><br>Pull up to take off. Follow the arrow to the<br>next field and descend onto the runway to land.');
     }
   },
 };
@@ -245,18 +246,35 @@ function breakDown(k) {
 }
 
 // ---------- flight ----------
+// The take-off run. The machine gathers speed along the strip by itself, but it stays on the
+// ground until the pilot pulls up. An airship just needs the pull: it rises from a standstill.
 function updateTakeoff(dt) {
   const p = G.plane, st = G.stats;
-  p.throttle = Math.max(0.7, input.throttle);
+  p.throttle = input.throttle;
   p.propSpin = 1;
-  p.speed = Math.min(st.speed * 0.6, p.speed + st.speed * 0.3 * dt);
-  p.x += Math.cos(p.heading) * p.speed * dt;
-  p.y += Math.sin(p.heading) * p.speed * dt;
-  const floor = levelAt(p.x, p.y) * HZ + G.belly;
-  if (p.speed > st.speed * 0.42) { p.vz = lerp(p.vz, 3.5, Math.min(1, dt * 3)); p.alt = Math.max(floor, p.alt + p.vz * dt); }
-  else p.alt = floor;
+  const here = levelAt(p.x, p.y), floor = here * HZ + G.belly;
+  const onGround = p.alt <= floor + 0.01;
+  p.speed = Math.min(st.speed * 0.6, p.speed + st.speed * 0.32 * p.throttle * dt);
+  const nx = p.x + Math.cos(p.heading) * p.speed * dt, ny = p.y + Math.sin(p.heading) * p.speed * dt;
+  if (onGround && levelAt(nx, ny) !== here) { // ran off the end of the flat ground without lifting off: roll back and try again
+    if (G.takeoffFrom) { p.x = G.takeoffFrom.x; p.y = G.takeoffFrom.y; }
+    p.speed = 0;
+    beep(160, 0.2, 'sawtooth');
+    return;
+  }
+  p.x = nx; p.y = ny;
+  const ready = st.hover || p.speed > st.speed * 0.4;
+  const pull = ready && input.pitch > 0.15;
+  if (pull) p.vz = lerp(p.vz, 3.5 * Math.max(0.5, input.pitch), Math.min(1, dt * 3));
+  else p.vz = onGround ? 0 : lerp(p.vz, -1.5, Math.min(1, dt * 2));
+  p.alt = Math.max(floor, p.alt + p.vz * dt);
   p.lean = lerp(p.lean, p.alt > floor ? 0.5 : 0, Math.min(1, dt * 3));
-  if (p.alt > floor + 4) G.mode = 'flying';
+  const up = isTouch ? 'drag up' : 'W or the up arrow';
+  if (p.throttle < 0.3 && !st.hover) ui.setAlert('Open the throttle to start the take-off run', true);
+  else if (!ready) ui.setAlert('Gathering speed', true);
+  else if (onGround) ui.setAlert(`Pull up to take off: ${up}`, true);
+  else ui.setAlert(null);
+  if (p.alt > floor + 4) { G.mode = 'flying'; ui.setAlert(null); }
 }
 
 function checkStorms() {
@@ -575,6 +593,12 @@ function frame(now) {
   }
   const dead = G.ac && (G.ac.fuel <= 0 || G.ac.cond.engine <= 0);
   setEngine(G.mode === 'takeoff' || (G.mode === 'flying' && !dead), p.throttle, G.fail.engine, G.time);
+  // music follows where you are: each world has its own mood, and trouble adds a nagging pulse
+  const wid = world().id;
+  const mood = G.mode === 'title' ? 'calm'
+    : wid === 'earth' ? (!inFlight ? 'calm' : realAlt > 100 ? 'space' : 'flight')
+      : wid === 'moon' ? 'moon' : wid === 'mars' ? 'mars' : wid === 'deep' ? 'deep' : 'era';
+  setMood(mood, G.mode === 'flying' && (PART_KEYS.some((k) => G.fail[k]) || G.inCell || G.heat > 0.15));
 
   requestAnimationFrame(frame);
 }
@@ -586,6 +610,9 @@ function nextView() {
   beep(600, 0.04);
 }
 ui.el.viewBtn.addEventListener('click', nextView);
+const musicBtn = document.getElementById('musicBtn');
+musicBtn.classList.toggle('off', !musicIsOn());
+musicBtn.addEventListener('click', () => { initAudio(); musicBtn.classList.toggle('off', !toggleMusic()); });
 
 // ---------- boot ----------
 G.view = (+localStorage.getItem('skywright.view') || 0) % VIEWS.length;
@@ -595,7 +622,7 @@ window.addEventListener('resize', onResize);
 onResize();
 initInput(canvas, ui.el.throttle, {
   action: tryFix,
-  key: (code) => { if (code === 'KeyM') toggleMute(); if (code === 'KeyF') tryFix(); if (code === 'KeyV') nextView(); },
+  key: (code) => { if (code === 'KeyM') toggleMute(); if (code === 'KeyN') musicBtn.click(); if (code === 'KeyF') tryFix(); if (code === 'KeyV') nextView(); },
 });
 G.model = aircraftModel('sparrow');
 G.belly = (G.model.nz * G.model.vs) / 2;
@@ -604,7 +631,7 @@ G.save = loadSave();
 ui.showPanel(ui.titleHTML(!!G.save));
 // handy in the browser console; skip() finishes the current mission
 window.__sky = {
-  G, V, actions,
+  G, V, actions, audioDebug,
   sim: (sec) => { for (let t = 0; t < sec; t += 1 / 60) tick(1 / 60); },
   skip: () => { G.landing = { hard: false }; completeMission(); },
 };

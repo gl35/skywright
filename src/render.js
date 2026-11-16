@@ -4,6 +4,7 @@
 import { CH, HZ, TS, TP, getChunk, beginFrame, cloudsAround, biomeParams, levelAt, world } from './world.js';
 import { hash2 } from './noise.js';
 import { ROLL_STEPS } from './models.js';
+import { animalsAround } from './wildlife.js';
 
 export const V = {
   W: 320, H: 480,
@@ -218,7 +219,7 @@ function drawStreaks(ctx, pl, frac) {
   ctx.stroke();
 }
 
-const cloudList = [];
+const cloudList = [], beasts = [];
 const far = (c) => V.s * (c.wx - V.camx) + V.c * (c.wy - V.camy); // depth down the screen
 const SLOTS = [[6, -18], [-10, -14]]; // where a stop's two buildings stand, relative to the landing ground
 
@@ -245,6 +246,24 @@ export function drawScene(ctx, scene) {
   }
 
   const reach = Math.hypot(V.W, V.H / V.tilt) / V.zoom * 0.6 + 60;
+  // wildlife: herds, flocks, whales
+  animalsAround(V.camx, V.camy, reach * 0.85, time, pl, beasts);
+  for (const e of beasts) {
+    ctx.globalAlpha = e.alpha;
+    drawStack(ctx, e.m, e.x, e.y, e.z + e.m.cz * e.vs, e.rot, e.vs);
+    if (e.spout) { // a whale blowing
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.globalAlpha = 0.85;
+      ctx.fillStyle = '#ffffff';
+      for (let k = 0; k < 6; k++) {
+        const p = project(e.x + Math.cos(e.rot) * 5, e.y + Math.sin(e.rot) * 5, 1.5 + k * 1.1);
+        ctx.fillRect((p[0] | 0) + ((k * 7) % 5) - 2, p[1] | 0, 2, 2);
+      }
+    }
+  }
+  ctx.globalAlpha = 1;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+
   cloudsAround(V.camx, V.camy, reach, time, cloudList);
   cloudList.sort((a, b) => far(a) - far(b));
   const setOf = (c) => scenery.clouds[w.clouds[c.storm ? 1 : 0]];

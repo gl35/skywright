@@ -79,6 +79,8 @@ export const BIOMES = {
   }),
 };
 
+for (const k of Object.keys(BIOMES)) BIOMES[k].id = k;
+
 // A world is a separate map: its own seed, stops, sky and rules.
 // pad: how a landing ground is painted. marks: buildings drawn at each stop.
 // water:false means the low ground is dry (you can land on it). dark: how black the sky is at ground level.

@@ -46,6 +46,9 @@ export function biomeParams(x) {
   };
 }
 
+// The id of the biome at this x (whichever of the two blending biomes is stronger).
+export function biomeOf(x) { mix(x); return (mT < 0.5 ? mA : mB).id; }
+
 // ---------- height ----------
 let outV, outHs;
 function terrain(x, y, stops) {
