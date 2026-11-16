@@ -1,28 +1,28 @@
 // Skywright: game state, flight model and the main loop.
 
 import './style.css';
-import { STOPS, AIRCRAFT, PARTS, PART_KEYS, STORY, START_SAVE, KIT_COST, KIT_CAP_COST, KIT_CAP_MAX } from './data.js';
-import { calcStats, repairCost, fuelCost, upCost, legDist, legPay, nextStop, thinAir, LAP_PRIZE } from './rules.js';
-import { drawCockpit } from './cockpit.js';
+import { WORLDS, AIRCRAFT, PARTS, PART_KEYS, MISSIONS, INTRO, START_SAVE, KIT_COST, KIT_CAP_COST, KIT_CAP_MAX } from './data.js';
+import { calcStats, repairCost, fuelCost, upCost, missionOf, targetOf, thinAir, km } from './rules.js';
 import { aircraftModel, buildScenery } from './models.js';
 import { V, resizeView, setCamera, drawScene, screenBearing, cloudsNow, project } from './render.js';
-import { HZ, levelAt, airfieldAt } from './world.js';
+import { HZ, levelAt, airfieldAt, setWorld, world } from './world.js';
 import { input, initInput, pollInput } from './input.js';
 import * as ui from './ui.js';
 import { initAudio, setEngine, beep, thud, toggleMute } from './audio.js';
 import { clamp, lerp } from './noise.js';
+import { drawCockpit } from './cockpit.js';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d', { alpha: false });
-const SAVE_KEY = 'skywright.save.v1';
-const LAST = STOPS.length - 1;
+const SAVE_KEY = 'skywright.save.v2';
 const isTouch = window.matchMedia('(pointer: coarse)').matches;
+const ZK = 1.9; // overall zoom: how many screen pixels one world cell covers
 
 // Camera views. tilt squashes the ground, elev is how far height lifts things up the screen:
 // a low tilt with a high elev looks along the ground instead of down at it.
 const VIEWS = [
-  { name: 'TOP', tilt: 0.62, elev: 0.75, ay: 0.62, zm: 1, sky: 0, skyH: 0.45 },
-  { name: 'TAIL', tilt: 0.36, elev: 0.93, ay: 0.76, zm: 1.3, sky: 1, skyH: 0.36 },
+  { name: 'TOP', tilt: 0.62, elev: 0.75, ay: 0.6, zm: 1, sky: 0, skyH: 0.45 },
+  { name: 'TAIL', tilt: 0.36, elev: 0.93, ay: 0.74, zm: 1.3, sky: 1, skyH: 0.36 },
   { name: 'COCKPIT', tilt: 0.3, elev: 0.95, ay: 0.98, zm: 1.6, sky: 1, skyH: 0.42 },
 ];
 // Great heights are drawn compressed so the ground stays in the picture.
@@ -32,15 +32,17 @@ const cockpitCtx = cockpitCanvas.getContext('2d', { alpha: false });
 
 const G = {
   mode: 'title', // title | cards | hangar | field | takeoff | flying | rollout | down
-  time: 0, frame: 0,
+  time: 0, frame: 0, boost: 0,
   save: null, ac: null, stats: null, model: null, belly: 2,
-  plane: { x: -40, y: 60, alt: 16, heading: 0, speed: 12, throttle: 0.6, roll: 0.25, rollShown: 0, vz: 0, propSpin: 1, trails: [[], []] },
+  mission: null, target: null, chapter: '', newCraft: null,
+  plane: { x: -40, y: 60, alt: 16, heading: 0, speed: 12, throttle: 0.6, roll: 0.25, rollShown: 0, vz: 0, propSpin: 1, spin: 0, lean: 0, stick: 0, trails: [[], []] },
   fail: { engine: false, frame: false, fuel: false, avionics: false },
   puffs: [], inCell: false, underCell: false,
-  tab: 'workshop', dest: 1, legTime: 0, timer: 0, landing: null, onWater: false,
+  tab: 'workshop', legTime: 0, timer: 0, landing: null, onWater: false,
+  transited: false, burnT: 0,
   cards: [], afterCards: null,
-  view: 0, sky: 0, heat: 0, orbitRun: false,
-  camRot: -Math.PI / 2, zoom: 3, ax: 0.5, ay: 0.7, trailT: 0, puffT: 0, hudT: 0, hintT: 0,
+  view: 0, sky: 0, heat: 0,
+  camRot: -Math.PI / 2, zoom: 3 * ZK, ax: 0.5, ay: 0.7, trailT: 0, puffT: 0, hudT: 0, hintT: 0,
   scenery: buildScenery(),
 };
 
@@ -48,25 +50,38 @@ const G = {
 function loadSave() {
   try {
     const s = JSON.parse(localStorage.getItem(SAVE_KEY));
-    return s && s.v === 1 ? s : null;
+    return s && s.v === 2 ? s : null;
   } catch { return null; }
 }
 function persist() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(G.save)); } catch { /* private mode */ } }
 
-function useAircraft() {
-  const s = G.save;
-  G.ac = s.fleet[s.current];
-  G.stats = calcStats(s.current, G.ac);
-  G.model = aircraftModel(s.current);
+// Work out the current mission from the save, and make sure its machine and world are loaded.
+function setup() {
+  const s = G.save, m = (G.mission = missionOf(s));
+  for (let i = Math.min(s.mission, MISSIONS.length - 1); i >= 0; i--) if (MISSIONS[i].ch) { G.chapter = MISSIONS[i].ch; break; }
+  const id = m.craft, A = AIRCRAFT[id];
+  if (!s.fleet[id]) { // a new machine joins the fleet in whatever state the story left it
+    s.fleet[id] = { cond: { engine: A.start.engine, frame: A.start.frame, fuel: A.start.fuel, avionics: A.start.avionics }, fuel: A.tank * A.start.tank };
+    G.newCraft = id;
+  }
+  G.ac = s.fleet[id];
+  G.stats = calcStats(id, s.up);
+  G.model = aircraftModel(id);
   G.belly = (G.model.nz * G.model.vs) / 2;
   G.ac.fuel = Math.min(G.ac.fuel, G.stats.tank);
+  G.target = targetOf(m);
+  setWorld(m.world);
+  G.transited = false; G.burnT = 0;
+  G.boost = G.frame + 12;
 }
 function clearTrails() { G.plane.trails[0].length = 0; G.plane.trails[1].length = 0; }
 function park() {
-  const st = STOPS[G.save.stop];
-  Object.assign(G.plane, { x: st.x - 2, y: st.y, heading: 0, speed: 0, vz: 0, roll: 0, throttle: 0, propSpin: 0, alt: 2 * HZ + G.belly });
+  const st = world().stops[G.mission.from];
+  Object.assign(G.plane, { x: st.x - 2, y: st.y, heading: 0, speed: 0, vz: 0, roll: 0, lean: 0, throttle: 0, propSpin: 0, alt: 2 * HZ + G.belly });
   clearTrails();
 }
+// The landing ground the nav arrow points at, or null while still climbing out for a transit burn.
+const destStop = () => (!G.mission.transit || G.transited ? G.target.stop : null);
 
 // ---------- screens ----------
 function refresh() {
@@ -80,25 +95,35 @@ function refresh() {
 function showCards(cards, then) {
   G.cards = cards.slice(); G.afterCards = then; G.mode = 'cards';
   ui.el.hud.classList.add('hidden');
+  ui.closeFix(); ui.setAlert(null); ui.setHint(null);
   nextCard();
 }
 function nextCard() {
   const c = G.cards.shift();
   if (c) { ui.showPanel(ui.cardHTML(c)); return; }
   const f = G.afterCards; G.afterCards = null;
+  ui.hidePanel();
   if (f) f();
 }
-const storyCard = (i) => ({ title: STORY[i].title, nan: STORY[i].nan, body: [STORY[i].you] });
 
-function enterHangar() {
+function openHangar() {
   G.mode = 'hangar';
-  useAircraft(); park();
+  G.tab = G.newCraft ? 'workshop' : G.tab;
+  G.newCraft = null;
+  persist(); refresh();
+}
+function enterHangar() {
+  setup(); park();
   for (const k of PART_KEYS) G.fail[k] = false;
-  G.puffs.length = 0; G.inCell = G.underCell = false;
-  G.tab = 'workshop';
+  G.puffs.length = 0; G.inCell = G.underCell = false; G.heat = 0;
   ui.closeFix(); ui.setAlert(null); ui.setHint(null);
   ui.el.hud.classList.add('hidden');
-  persist(); refresh();
+  G.tab = 'workshop';
+  if (G.newCraft && G.save.mission > 0) {
+    const A = AIRCRAFT[G.newCraft];
+    const worst = PART_KEYS.reduce((a, k) => (G.ac.cond[k] < G.ac.cond[a] ? k : a), 'engine');
+    showCards([{ title: `The ${A.name}`, body: [A.blurb, `She is yours for the next flight, and she needs work. The ${PARTS[worst].name.toLowerCase()} is the worst of it.`], btn: 'To the workshop' }], openHangar);
+  } else openHangar();
 }
 
 function towBack(kind) {
@@ -107,21 +132,23 @@ function towBack(kind) {
   const dmg = kind === 'crash' ? 35 : kind === 'ditch' ? 22 : 0;
   s.money -= fee;
   if (dmg) for (const k of PART_KEYS) G.ac.cond[k] = Math.max(5, G.ac.cond[k] - dmg);
-  const title = kind === 'crash' ? 'Crashed' : kind === 'ditch' ? 'Ditched at sea' : 'Towed in';
-  const first = kind === 'crash' ? 'You walk away from it. The aircraft does not look as lucky.'
-    : kind === 'ditch' ? 'The aircraft settles into the swell and you climb out onto the wing.'
-      : 'With a dry tank there is nothing to do but wait for the truck.';
-  showCards([{ title, body: [first, `A salvage crew brings the ${AIRCRAFT[s.current].name} back to ${STOPS[s.stop].name}. It costs you $${fee}.${dmg ? ' Every part took damage.' : ''}`], btn: 'Back to the workshop' }], enterHangar);
+  const home = WORLDS[G.mission.world].stops[G.mission.from].name;
+  const title = kind === 'crash' ? 'Crashed' : kind === 'ditch' ? 'Ditched' : 'Stranded';
+  const first = kind === 'crash' ? 'You walk away from it. The machine does not look as lucky.'
+    : kind === 'ditch' ? 'She settles into the swell and you climb out onto the wing.'
+      : 'With a dry tank there is nothing to do but wait.';
+  showCards([{ title, body: [first, `It takes time, favours and $${fee} to get the ${AIRCRAFT[G.mission.craft].name} back to ${home}.${dmg ? ' Every part took damage.' : ''}`], btn: 'Back to the workshop' }], enterHangar);
 }
 
 const actions = {
   new() {
     initAudio();
-    G.save = START_SAVE(); G.save.best = 0;
-    useAircraft(); park();
-    showCards([storyCard(0)], enterHangar);
+    G.save = START_SAVE();
+    setup(); park();
+    G.newCraft = null;
+    showCards([{ title: INTRO.title, nan: INTRO.nan, body: INTRO.body }], enterHangar);
   },
-  continue() { initAudio(); useAircraft(); enterHangar(); },
+  continue() { initAudio(); enterHangar(); },
   card() { beep(520, 0.05); nextCard(); },
   tab(a) { G.tab = a; refresh(); },
   refuel() {
@@ -132,7 +159,7 @@ const actions = {
     G.ac.fuel += units;
   },
   repair(a) {
-    const [k, pts] = a.split(':'), n = +pts, c = repairCost(G.save.current, n);
+    const [k, pts] = a.split(':'), n = +pts, c = repairCost(G.mission.craft, n);
     if (G.save.money < c) return;
     G.save.money -= c;
     G.ac.cond[k] = Math.min(100, G.ac.cond[k] + n);
@@ -141,21 +168,12 @@ const actions = {
   kitcap() { const s = G.save; if (s.kitCap < KIT_CAP_MAX && s.money >= KIT_CAP_COST) { s.money -= KIT_CAP_COST; s.kitCap++; } },
   shift() { const s = G.save; if (!s.shift) { s.shift = true; s.money += 60; } },
   upgrade(k) {
-    const s = G.save, lv = G.ac.up[k];
-    if (lv >= 3 || s.money < upCost(s.current, lv)) return;
-    s.money -= upCost(s.current, lv);
-    G.ac.up[k]++;
-    useAircraft();
+    const s = G.save, lv = s.up[k];
+    if (lv >= 3 || s.money < upCost(lv)) return;
+    s.money -= upCost(lv);
+    s.up[k]++;
+    G.stats = calcStats(G.mission.craft, s.up);
   },
-  buy(id) {
-    const s = G.save, A = AIRCRAFT[id];
-    if (s.fleet[id] || s.money < A.cost || !(A.lap ? s.done : (s.best || 0) >= A.from)) return;
-    s.money -= A.cost;
-    s.fleet[id] = { cond: { engine: 100, frame: 100, fuel: 100, avionics: 100 }, up: { engine: 0, tank: 0, frame: 0, avionics: 0 }, fuel: A.tank * 0.5 };
-    s.current = id;
-    useAircraft(); park();
-  },
-  fly(id) { if (G.save.fleet[id]) { G.save.current = id; useAircraft(); park(); } },
   fieldfix(k) {
     const s = G.save;
     if (s.kits < 1) return;
@@ -165,15 +183,14 @@ const actions = {
   },
   tow() { towBack('tow'); },
   takeoff() {
-    if (G.ac.fuel < 1) { beep(160, 0.25); G.tab = 'plan'; return; }
+    if (G.ac.fuel < 1) { beep(160, 0.25); G.tab = 'mission'; return; }
     initAudio();
     const p = G.plane, s = G.save;
     if (G.mode === 'hangar') {
-      p.x = STOPS[s.stop].x - 20; p.y = STOPS[s.stop].y; p.heading = 0;
-      G.legTime = 0;
-      G.orbitRun = G.stats.orbit && s.done && s.stop === 0;
+      const st = world().stops[G.mission.from];
+      p.x = st.x - 20; p.y = st.y; p.heading = 0;
+      G.legTime = 0; G.transited = false; G.burnT = 0;
     }
-    G.dest = nextStop(s, G.stats);
     p.speed = 0; p.vz = 0; p.roll = 0;
     input.throttle = 0.85;
     G.mode = 'takeoff';
@@ -184,8 +201,8 @@ const actions = {
       s.seen.controls = true;
       G.hintT = 10;
       ui.setHint(isTouch
-        ? 'Drag left or right to steer.<br>Drag up to climb, down to descend.<br>The slider on the right is the throttle.<br>VIEW changes the camera.<br><br>Fly east to the next field and<br>descend onto the runway to land.'
-        : 'A / D or arrows: steer<br>W / S: climb and descend<br>Q / E: throttle &nbsp; Space: fix a breakdown<br>V: change view<br><br>Fly east to the next field and<br>descend onto the runway to land.');
+        ? 'Drag left or right to steer.<br>Drag up to climb, down to descend.<br>The slider on the right is the throttle.<br>VIEW changes the camera.<br><br>Follow the arrow to the next field and<br>descend onto the runway to land.'
+        : 'A / D or arrows: steer<br>W / S: climb and descend<br>Q / E: throttle &nbsp; Space: fix a breakdown<br>V: change view<br><br>Follow the arrow to the next field and<br>descend onto the runway to land.');
     }
   },
 };
@@ -238,6 +255,7 @@ function updateTakeoff(dt) {
   const floor = levelAt(p.x, p.y) * HZ + G.belly;
   if (p.speed > st.speed * 0.42) { p.vz = lerp(p.vz, 3.5, Math.min(1, dt * 3)); p.alt = Math.max(floor, p.alt + p.vz * dt); }
   else p.alt = floor;
+  p.lean = lerp(p.lean, p.alt > floor ? 0.5 : 0, Math.min(1, dt * 3));
   if (p.alt > floor + 4) G.mode = 'flying';
 }
 
@@ -252,8 +270,23 @@ function checkStorms() {
   }
 }
 
+// Leave this world for the mission's far one: story cards, then you arrive high above the landing ground.
+function doTransit() {
+  const m = G.mission, t = G.target, p = G.plane;
+  G.transited = true;
+  showCards([{ title: `To ${WORLDS[t.world].name}`, body: m.transitText, btn: 'Begin the descent' }], () => {
+    setWorld(t.world);
+    Object.assign(p, { x: t.stop.x - 2600, y: t.stop.y, heading: 0, alt: 210, vz: 0, roll: 0, speed: G.stats.speed * 4 });
+    clearTrails();
+    G.camRot = -Math.PI / 2;
+    G.boost = G.frame + 12;
+    G.mode = 'flying';
+    ui.el.hud.classList.remove('hidden');
+  });
+}
+
 function updateFlight(dt) {
-  const p = G.plane, st = G.stats, ac = G.ac, f = G.fail, c = ac.cond;
+  const p = G.plane, st = G.stats, ac = G.ac, f = G.fail, c = ac.cond, m = G.mission, grav = world().gravity;
   G.legTime += dt;
   checkStorms();
   p.throttle = input.throttle;
@@ -261,27 +294,30 @@ function updateFlight(dt) {
   const power = dead ? 0 : p.throttle * (f.engine ? 0.5 : 1) * (0.8 + 0.2 * c.engine / 100);
   const thin = thinAir(st, p.alt), boost = 1 + thin * st.space; // thin air: spacecraft get much faster up high
   const orbiting = st.orbit && p.alt > 170;
-  let base = st.hover ? (dead ? 0.1 : power) : dead ? 0.4 : 0.35 + 0.65 * power;
+  let base = st.hover ? (dead ? 0.1 : power) : dead ? 0.35 : 0.25 + 0.75 * power;
   if (orbiting) base = Math.max(base, 0.9); // nothing to slow you down up here
   p.speed += (st.speed * base * boost - p.speed) * Math.min(1, dt * 0.7);
   p.propSpin = dead ? Math.max(0, p.propSpin - dt * 0.5) : 1;
 
-  p.stick = (p.stick || 0) + (input.turn - (p.stick || 0)) * Math.min(1, dt * 6); // ease the stick so taps are gentle
+  p.stick += (input.turn - p.stick) * Math.min(1, dt * 6); // ease the stick so taps are gentle
   let turn = p.stick;
   if (f.frame) turn = clamp(turn * 0.45 + 0.22, -1, 1);
   if (G.inCell) turn += Math.sin(G.time * 7.3) * 0.35;
   p.heading += (turn * st.turn * dt) / (1 + thin * st.space * 0.5);
-  p.roll += (turn * 0.7 - p.roll) * Math.min(1, dt * 5);
+  const wobble = Math.sin(G.time * 1.9) * 0.025 + Math.sin(G.time * 3.1) * 0.015; // never perfectly still
+  p.roll += (turn * 0.7 + wobble - p.roll) * Math.min(1, dt * 5);
 
   let vzT;
   if (dead) vzT = (st.hover ? -0.8 : -1.6) + Math.min(0, input.pitch) * st.climb + Math.max(0, input.pitch) * 0.7;
   else vzT = input.pitch > 0 ? input.pitch * st.climb * (0.3 + 0.7 * power) : input.pitch * st.climb * 0.9;
+  if (vzT < 0) vzT *= 0.45 + 0.55 * grav; // things fall slowly in low gravity
   if (vzT > 0 && p.alt > st.ceil - 3) vzT *= clamp((st.ceil - p.alt) / 3, 0, 1);
   if (G.inCell) vzT += Math.sin(G.time * 5.1) * 3;
   const agl = p.alt - (levelAt(p.x, p.y) * HZ + G.belly);
   if (agl < 3 && vzT < -(0.8 + agl)) vzT = -(0.8 + agl); // flare: ease the sink rate close to the ground
   p.vz += (vzT - p.vz) * Math.min(1, dt * 3);
   p.alt += p.vz * dt;
+  p.lean = lerp(p.lean, clamp(p.vz / st.climb, -1, 1) * 0.8, Math.min(1, dt * 4));
   p.x += Math.cos(p.heading) * p.speed * dt;
   p.y += Math.sin(p.heading) * p.speed * dt;
 
@@ -293,7 +329,7 @@ function updateFlight(dt) {
   c.frame -= 0.035 * w; c.fuel -= 0.06 * w; c.avionics -= 0.045 * w;
   G.heat = 0;
   if (st.space && thin > 0.15 && p.vz < 0) { // re-entry: the steeper the descent, the hotter the hull
-    G.heat = clamp(thin * (-p.vz / (st.climb * 0.9) - 0.45) * 2.2, 0, 1);
+    G.heat = clamp(thin * (-p.vz / (st.climb * 0.9 * (0.45 + 0.55 * grav)) - 0.45) * 2.2, 0, 1);
     c.frame -= 7 * G.heat * dt;
   }
   if (G.inCell) {
@@ -310,21 +346,32 @@ function updateFlight(dt) {
   const lvl = levelAt(p.x, p.y), floor = lvl * HZ + G.belly;
   if (p.alt <= floor) { p.alt = floor; touchdown(lvl); return; }
 
+  // leaving this world: hold high altitude until the burn
+  if (m.transit && !G.transited) {
+    if (p.alt > 170) {
+      G.burnT += dt;
+      if (G.burnT > 6) { doTransit(); return; }
+    } else G.burnT = Math.max(0, G.burnT - dt);
+  }
+
   // alerts, most urgent first
   const failed = PART_KEYS.find((k) => f[k]);
-  const dx = STOPS[G.dest].x - p.x, dy = STOPS[G.dest].y - p.y, dist = Math.hypot(dx, dy);
+  const dest = destStop();
+  const dist = dest ? Math.hypot(dest.x - p.x, dest.y - p.y) : 1e9;
   const ahead = levelAt(p.x + Math.cos(p.heading) * p.speed * 1.6, p.y + Math.sin(p.heading) * p.speed * 1.6) * HZ + G.belly;
   const nearField = airfieldAt(p.x, p.y) >= 0 || dist < 60;
+  const wet = world().water;
   if (failed) ui.setAlert(`${PARTS[failed].fail} · ${PARTS[failed].effect}${G.save.kits > 0 ? '' : ' · NO KITS LEFT'}`);
   else if (dead) ui.setAlert(ac.fuel <= 0 ? 'OUT OF FUEL · GLIDING' : 'ENGINE DEAD · GLIDING');
   else if (G.heat > 0.15) ui.setAlert('RE-ENTRY HEAT · SHALLOW YOUR DESCENT');
   else if (ahead > p.alt - 0.5 && ahead > floor + 1) ui.setAlert('TERRAIN AHEAD · CLIMB OR TURN');
-  else if (p.alt - floor < 2.5 && p.vz < 0 && !nearField) ui.setAlert(lvl === 0 && !st.floats ? 'TOO LOW · PULL UP' : 'LOW');
-  else if (G.inCell) ui.setAlert('INSIDE A STORM CELL');
+  else if (p.alt - floor < 2.5 && p.vz < 0 && !nearField) ui.setAlert(lvl === 0 && wet && !st.floats ? 'TOO LOW · PULL UP' : 'LOW');
+  else if (G.inCell) ui.setAlert('INSIDE A STORM');
   else if (ac.fuel / st.tank < 0.15) ui.setAlert('LOW FUEL');
-  else if (thin > 0 && dist < 400 + p.alt * 25) ui.setAlert(`${STOPS[G.dest].name} is coming up. Start a gentle descent`, true);
+  else if (!dest) ui.setAlert(p.alt > 170 ? `Hold this height. Lining up the burn: ${Math.ceil(6 - G.burnT)}` : 'Climb until the sky is black, then hold', true);
+  else if (thin > 0 && dist < 400 + p.alt * 25) ui.setAlert(`${dest.name} is coming up. Start a gentle descent`, true);
   else if (orbiting) ui.setAlert('In orbit. Engines idling', true);
-  else if (dist < 220) ui.setAlert(dist < 60 ? (p.speed > st.speed * 0.8 ? 'Throttle back, then descend onto the runway' : 'Descend onto the runway to land') : `${STOPS[G.dest].name} ahead. Start your descent`, true);
+  else if (dist < 220) ui.setAlert(dist < 60 ? (p.speed > st.speed * 0.8 ? 'Throttle back, then descend onto the landing ground' : 'Descend onto the landing ground') : `${dest.name} ahead. Start your descent`, true);
   else ui.setAlert(null);
 }
 
@@ -334,7 +381,7 @@ function touchdown(lvl) {
   const fast = p.speed > st.speed * 0.8, hard = fast || p.vz < -3;
   let res;
   if (af >= 0 && lvl === 2) res = 'airfield';
-  else if (lvl === 0) res = st.floats ? 'water' : 'ditch';
+  else if (lvl === 0 && world().water) res = st.floats ? 'water' : 'ditch';
   else if (lvl <= 3 && !fast) res = 'field';
   else res = 'crash';
   G.landing = { res, af, hard };
@@ -355,6 +402,7 @@ function updateRollout(dt) {
   p.speed = Math.max(0, p.speed - st.speed * 0.45 * dt);
   p.throttle = 0; p.vz = 0;
   p.roll *= 1 - Math.min(1, dt * 6);
+  p.lean *= 1 - Math.min(1, dt * 6);
   p.propSpin = Math.max(0.05, p.speed / st.speed);
   const nx = p.x + Math.cos(p.heading) * p.speed * dt, ny = p.y + Math.sin(p.heading) * p.speed * dt;
   const here = levelAt(p.x, p.y);
@@ -363,58 +411,48 @@ function updateRollout(dt) {
   if (p.speed <= 0.3) resolveLanding();
 }
 
+// The mission's flight is done: pay, tell the next part of the story, move on.
+function completeMission() {
+  const s = G.save, m = G.mission, hard = G.landing && G.landing.hard;
+  s.money += m.pay;
+  s.mission++; s.shift = false;
+  const body = m.arrive.slice();
+  if (m.pay) body.push(`<b>You are paid $${m.pay}.</b>${hard ? ' You came in fast and hard, and the airframe took a knock. Ease the throttle back before you touch down.' : ''}`);
+  const cards = [{ title: m.title, body, note: m.real }];
+  const next = MISSIONS[s.mission];
+  if (!next) cards.push({ title: 'The logbook is full', body: ['Sixteen flights, eight machines, four dynasties, three worlds and one very long way round.', 'Thank you for playing this prototype of Skywright.'], btn: 'Keep flying' });
+  else if (next.ch) cards.push({ ch: 'Next', title: next.ch, body: [next.brief], btn: 'Turn the page' });
+  showCards(cards, enterHangar);
+}
+
 function resolveLanding() {
-  const { res, af, hard } = G.landing, s = G.save;
-  if (res === 'airfield') {
-    const prev = s.best || 0, home = af === LAST;
-    s.stop = af;
-    if (af <= prev && !home) { enterHangar(); return; }
-    const cards = [];
-    if (af > prev) {
-      const pay = legPay(prev, af);
-      const express = G.legTime < (legDist(prev, af) / (G.stats.speed * 0.8)) * 1.15;
-      const bonus = express ? Math.round(pay * 0.2) : 0;
-      s.money += pay + bonus; s.best = af; s.shift = false;
-      cards.push({
-        title: `Landed at ${STOPS[af].name}`,
-        body: [`Mail delivered. You are paid $${pay}.${bonus ? ` Express bonus: $${bonus}.` : ''}`, hard ? 'You came in fast and hard. The airframe took a knock. Ease the throttle back before you touch down.' : 'A clean landing.'],
-      }, storyCard(af));
-    }
-    if (home) {
-      if (G.orbitRun) {
-        const t = Math.round(G.legTime);
-        const best = !s.orbitBest || t < s.orbitBest;
-        if (best) s.orbitBest = t;
-        cards.push({ title: 'Once round the world', body: [`One orbit, launch to landing, in ${t} seconds.${best ? ' That is your best lap.' : ` Your best is ${s.orbitBest} seconds.`}`, 'The first trip took eight legs and a logbook full of repairs. Nan would have laughed out loud.'], btn: 'Back to the hangar' });
-      } else if (!s.done) {
-        s.done = true;
-        s.money += LAP_PRIZE;
-        cards.push({ title: 'All the way round', body: ['Eight legs, one logbook, and an aircraft you kept flying with your own hands.', `The flying club hands you the round-the-world prize: $${LAP_PRIZE}.`, 'A crew from the new spaceport at Wrenfield has been following your trip. They have a ship called the Starling, and they want a pilot who can fix things. Look in the Aircraft tab.'], btn: 'Back to the hangar' });
-      } else {
-        cards.push({ title: 'Home again', body: ['Another lap in the logbook.'], btn: 'Back to the hangar' });
-      }
-      s.stop = 0; // the two ends of the route are the same field
-    }
-    G.orbitRun = false;
-    showCards(cards, enterHangar);
-  } else if (res === 'field' || res === 'water') {
+  const { res, af } = G.landing, m = G.mission, t = G.target, here = world().id;
+  const fieldStop = () => {
     G.mode = 'field'; G.onWater = res === 'water';
     G.plane.propSpin = 0;
     ui.el.hud.classList.add('hidden');
     refresh();
-  } else towBack(res);
+  };
+  if (res === 'airfield') {
+    if (!m.free && here === t.world && af === t.index && (!m.transit || G.transited)) completeMission();
+    else if (here === m.world && af === m.from) enterHangar();
+    else fieldStop(); // some other landing ground: rest, patch up, fly on
+  } else if (res === 'field' || res === 'water') fieldStop();
+  else towBack(res);
 }
 
 function updateDemo(dt) {
   const p = G.plane;
   p.heading += 0.22 * dt; p.roll = 0.3; p.speed = 12; p.throttle = 0.6; p.propSpin = 1;
   p.alt = 16 + Math.sin(G.time * 0.4) * 2;
+  p.lean = Math.cos(G.time * 0.4) * 0.3;
   p.x += Math.cos(p.heading) * p.speed * dt;
   p.y += Math.sin(p.heading) * p.speed * dt;
 }
 
 function updateEffects(dt, airborne) {
   const p = G.plane, m = G.model;
+  p.spin += dt * (5 + 38 * p.throttle) * p.propSpin;
   G.trailT -= dt;
   if (G.trailT <= 0) {
     G.trailT = 0.045;
@@ -423,7 +461,7 @@ function updateEffects(dt, airborne) {
       const span = side * m.tips * m.vs;
       const r = span * Math.cos(p.roll);
       const tr = p.trails[i];
-      tr.push({ x: p.x - sh * r, y: p.y + ch * r, z: visAlt(p.alt) - span * Math.sin(p.roll), t: G.time, cut: !airborne });
+      tr.push({ x: p.x - sh * r, y: p.y + ch * r, z: visAlt(p.alt) - span * Math.sin(p.roll), t: G.time, cut: !airborne || p.throttle < 0.35, a: 0.1 + 0.55 * p.throttle * p.throttle });
       if (tr.length > 50) tr.shift();
     });
   }
@@ -469,18 +507,22 @@ function frame(now) {
   const airborne = G.mode === 'title' || G.mode === 'flying';
   updateEffects(dt, airborne);
 
+  // how fast we are going compared with this machine's ordinary top speed: drives the sense of speed
+  const frac = inFlight && G.stats ? clamp(p.speed / G.stats.speed, 0, 1.6) : G.mode === 'title' ? 0.6 : 0;
+
   // camera: behind the aircraft in flight, slow orbit on the ground
   const wide = V.W > V.H;
   const vw = inFlight ? VIEWS[G.view] : VIEWS[0];
-  const dark = clamp((p.alt - 50) / 120, 0, 1);
+  const dark = Math.max(world().dark, clamp((p.alt - 50) / 120, 0, 1));
   let tz, tax, tay;
   if (inFlight || G.mode === 'title') {
     G.camRot += angDiff(-p.heading - Math.PI / 2, G.camRot) * Math.min(1, dt * 3);
-    tz = (p.alt < 60 ? lerp(3.0, 2.0, p.alt / 60) : lerp(2.0, 1.25, clamp((p.alt - 60) / 160, 0, 1))) * vw.zm;
-    tax = 0.5; tay = G.mode === 'title' ? 0.78 : vw.ay;
+    tz = (p.alt < 60 ? lerp(3.0, 2.0, p.alt / 60) : lerp(2.0, 1.25, clamp((p.alt - 60) / 160, 0, 1))) * vw.zm * ZK;
+    tz *= 1.06 - 0.14 * Math.min(1, frac); // pull back as speed builds
+    tax = 0.5; tay = G.mode === 'title' ? 0.78 : vw.ay + (G.view === 2 ? 0 : 0.07 * Math.min(1, frac)); // and look further ahead
   } else {
     G.camRot += dt * 0.12;
-    tz = 3.8; tax = wide && G.mode !== 'cards' ? 0.24 : 0.5; tay = wide ? 0.5 : 0.17;
+    tz = 3.8 * ZK; tax = wide && G.mode !== 'cards' ? 0.24 : 0.5; tay = wide ? 0.5 : 0.17;
     if (G.mode === 'cards') tay = wide ? 0.86 : 0.14; // keep the aircraft clear of the card
   }
   const kk = Math.min(1, dt * 2.5);
@@ -491,11 +533,12 @@ function frame(now) {
 
   const realAlt = p.alt;
   p.alt = visAlt(realAlt); // draw with the compressed height, then put the real one back
-  setCamera(p.x, p.y, p.alt, G.camRot, G.zoom, G.ax, G.ay);
+  const shake = G.mode === 'flying' && p.throttle > 0.85 ? (p.throttle - 0.85) * 5 : 0; // the airframe buzzes at full power
+  setCamera(p.x, p.y, p.alt, G.camRot, G.zoom, G.ax + ((Math.random() - 0.5) * shake) / V.W, G.ay + ((Math.random() - 0.5) * shake) / V.H);
   drawScene(cockpit ? cockpitCtx : ctx, {
     time: G.time, frame: G.frame, plane: p, model: G.model, scenery: G.scenery, puffs: G.puffs,
-    inStorm: G.mode === 'flying' && (G.inCell || G.underCell), showPlane: !cockpit, budget: G.frame < 10 ? 40 : 3,
-    sky: G.sky, skyH: vw.skyH, dark,
+    inStorm: G.mode === 'flying' && (G.inCell || G.underCell), showPlane: !cockpit, budget: G.frame < G.boost ? 40 : 3,
+    sky: G.sky, skyH: vw.skyH, dark, speedFrac: airborne ? frac : 0,
   });
   if (cockpit) { // tip the whole outside world with the bank, then draw the cockpit level on top
     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -505,7 +548,7 @@ function frame(now) {
     drawCockpit(ctx, V.W, V.H, {
       speed: p.speed / (G.stats.speed * (1 + G.stats.space)), alt: realAlt / G.stats.ceil, fuel: G.ac.fuel / G.stats.tank,
       roll: p.roll, vz: clamp(p.vz / G.stats.climb, -1, 1), time: G.time,
-      prop: G.model.props.length > 0 && p.propSpin > 0.05, nose: G.model.noseCol || '#8a8f9c',
+      prop: G.model.props.length > 0 && p.propSpin > 0.05, nose: AIRCRAFT[G.mission.craft].nose,
     });
   }
   p.alt = realAlt;
@@ -518,14 +561,15 @@ function frame(now) {
         if (!c.storm) continue;
         const q = project(c.wx, c.wy, c.alt);
         if (q[0] > 0 && q[0] < V.W && q[1] > 0 && q[1] < V.H) continue;
-        ctx.fillRect(clamp(q[0], 3, V.W - 6) | 0, clamp(q[1], 3, V.H - 6) | 0, 3, 3);
+        ctx.fillRect(clamp(q[0], 3, V.W - 7) | 0, clamp(q[1], 3, V.H - 7) | 0, 4, 4);
       }
     }
     G.hudT -= dt;
     if (G.hudT <= 0) {
       G.hudT = 0.1;
-      const d = STOPS[G.dest];
-      ui.updateHud(G, screenBearing(p.x, p.y, d.x, d.y), Math.hypot(d.x - p.x, d.y - p.y), input.throttle);
+      const d = destStop();
+      if (d) ui.updateHud(G, screenBearing(p.x, p.y, d.x, d.y), `${d.name}  ${km(Math.hypot(d.x - p.x, d.y - p.y))} km`, input.throttle);
+      else ui.updateHud(G, null, 'Climb to the black sky', input.throttle);
     }
     if (G.hintT > 0) { G.hintT -= dt; if (G.hintT <= 0) ui.setHint(null); }
   }
@@ -555,7 +599,13 @@ initInput(canvas, ui.el.throttle, {
 });
 G.model = aircraftModel('sparrow');
 G.belly = (G.model.nz * G.model.vs) / 2;
+G.boost = 12;
 G.save = loadSave();
 ui.showPanel(ui.titleHTML(!!G.save));
-window.__sky = { G, V, actions, STOPS, sim: (sec) => { for (let t = 0; t < sec; t += 1 / 60) tick(1 / 60); } }; // handy in the browser console
+// handy in the browser console; skip() finishes the current mission
+window.__sky = {
+  G, V, actions,
+  sim: (sec) => { for (let t = 0; t < sec; t += 1 / 60) tick(1 / 60); },
+  skip: () => { G.landing = { hard: false }; completeMission(); },
+};
 requestAnimationFrame(frame);

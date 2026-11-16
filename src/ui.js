@@ -1,7 +1,7 @@
 // DOM screens: the flight HUD, the in-flight repair mini-game, story cards and the hangar.
 
-import { STOPS, AIRCRAFT, UPGRADES, PARTS, PART_KEYS, STORY, KIT_COST, KIT_CAP_COST, KIT_CAP_MAX, BIOMES } from './data.js';
-import { calcStats, cruiseRange, repairCost, fuelCost, upCost, legDist, legPay, km, fmtAlt, nextStop } from './rules.js';
+import { WORLDS, AIRCRAFT, UPGRADES, PARTS, PART_KEYS, MISSIONS, INTRO, EPILOGUE, KIT_COST, KIT_CAP_COST, KIT_CAP_MAX, BIOMES } from './data.js';
+import { calcStats, cruiseRange, repairCost, fuelCost, upCost, missionDist, targetOf, km, fmtAlt } from './rules.js';
 
 const $ = (id) => document.getElementById(id);
 export const el = {};
@@ -30,7 +30,8 @@ export function flash() {
   requestAnimationFrame(() => requestAnimationFrame(() => el.flash.classList.remove('on')));
 }
 
-export function updateHud(G, bearing, dist, throttle) {
+// navText is what to show beside the arrow; bearing null hides the arrow.
+export function updateHud(G, bearing, navText, throttle) {
   const p = G.plane, st = G.stats, ac = G.ac;
   el.gSpd.textContent = Math.round(p.speed * 10);
   el.gAlt.textContent = fmtAlt(Math.max(0, p.alt - G.belly));
@@ -42,9 +43,9 @@ export function updateHud(G, bearing, dist, throttle) {
     el.navArrow.style.visibility = 'hidden';
     el.navText.textContent = 'NAV OFFLINE';
   } else {
-    el.navArrow.style.visibility = 'visible';
-    el.navArrow.style.transform = `rotate(${bearing}rad)`;
-    el.navText.textContent = `${STOPS[G.dest].name}  ${km(dist)} km`;
+    el.navArrow.style.visibility = bearing === null ? 'hidden' : 'visible';
+    if (bearing !== null) el.navArrow.style.transform = `rotate(${bearing}rad)`;
+    el.navText.textContent = navText;
   }
   let h = '';
   for (const k of PART_KEYS) h += `<div class="pip ${condCls(ac.cond[k])}${G.fail[k] ? ' failed' : ''}">${PARTS[k].name.slice(0, 3).toUpperCase()}</div>`;
@@ -97,24 +98,26 @@ export function hidePanel() { el.panel.classList.add('hidden'); el.panel.innerHT
 export function titleHTML(hasSave) {
   return `<div class="card title">
     <h1>SKYWRIGHT</h1>
-    <p>Fly it. Fix it. All the way round.</p>
-    ${hasSave ? '<button class="btn primary" data-act="continue">Continue flight</button>' : ''}
-    <button class="btn ${hasSave ? 'ghost' : 'primary'}" data-act="new">New flight</button>
+    <p>Fly it. Fix it. Follow the logbook.</p>
+    ${hasSave ? '<button class="btn primary" data-act="continue">Continue</button>' : ''}
+    <button class="btn ${hasSave ? 'ghost' : 'primary'}" data-act="new">New story</button>
     <p><small>Prototype build</small></p>
   </div>`;
 }
 
 export function cardHTML(c) {
   return `<div class="card">
+    ${c.ch ? `<small class="chapter">${c.ch}</small>` : ''}
     <h2>${c.title}</h2>
     ${c.nan ? `<p class="nan">${c.nan}<br><small>Nan's logbook</small></p>` : ''}
     ${(c.body || []).map((t) => `<p>${t}</p>`).join('')}
+    ${c.note ? `<p class="note">${c.note}</p>` : ''}
     <button class="btn primary" data-act="card">${c.btn || 'Continue'}</button>
   </div>`;
 }
 
 function workshop(G) {
-  const s = G.save, ac = G.ac, st = G.stats, id = s.current;
+  const s = G.save, ac = G.ac, st = G.stats, id = G.mission.craft;
   const need = st.tank - ac.fuel;
   const full = fuelCost(need);
   const afford = Math.min(need, Math.floor(s.money / 0.6));
@@ -145,40 +148,37 @@ function workshop(G) {
   </div>
   <div class="row">
     <div class="name">Short of cash?</div>
-    <div class="acts"><button class="mini" data-act="shift" ${s.shift ? 'disabled' : ''}>${s.shift ? 'Done' : 'Work a shift +$60'}</button></div>
-    <p>Help the field mechanic for an afternoon. Once per visit.</p>
+    <div class="acts"><button class="mini" data-act="shift" ${s.shift ? 'disabled' : ''}>${s.shift ? 'Done' : 'Odd jobs +$60'}</button></div>
+    <p>Mend something for the locals. Once per stop.</p>
   </div>`;
   return h;
 }
 
-function upgrades(G) {
-  const s = G.save, ac = G.ac, id = s.current;
-  let h = `<p><small>Upgrades stay with the ${AIRCRAFT[id].name}.</small></p>`;
+function skills(G) {
+  const s = G.save;
+  let h = '<p><small>What you learn stays with you, whatever you are flying.</small></p>';
   for (const k of Object.keys(UPGRADES)) {
-    const lv = ac.up[k];
+    const lv = s.up[k];
     h += `<div class="row">
       <div class="name">${UPGRADES[k].name} <span class="lv">${'■'.repeat(lv)}${'□'.repeat(3 - lv)}</span></div>
-      <div class="acts"><button class="mini gold" data-act="upgrade" data-arg="${k}" ${lv >= 3 || s.money < upCost(id, lv) ? 'disabled' : ''}>${lv >= 3 ? 'Max' : `$${upCost(id, lv)}`}</button></div>
+      <div class="acts"><button class="mini gold" data-act="upgrade" data-arg="${k}" ${lv >= 3 || s.money < upCost(lv) ? 'disabled' : ''}>${lv >= 3 ? 'Max' : `$${upCost(lv)}`}</button></div>
       <p>${UPGRADES[k].desc}</p>
     </div>`;
   }
   return h;
 }
 
-function aircraft(G) {
+function fleet(G) {
   const s = G.save;
-  let h = '';
+  let h = '<p><small>Each part of the journey needs its own machine. They come to you as the story goes.</small></p>';
   for (const id of Object.keys(AIRCRAFT)) {
-    const A = AIRCRAFT[id], owned = s.fleet[id];
-    const st = calcStats(id, owned || { up: { engine: 0, tank: 0, frame: 0, avionics: 0 } });
-    let btn;
-    if (id === s.current) btn = '<button class="mini" disabled>Flying</button>';
-    else if (owned) btn = `<button class="mini gold" data-act="fly" data-arg="${id}">Fly this</button>`;
-    else if (A.lap ? s.done : (s.best || 0) >= A.from) btn = `<button class="mini gold" data-act="buy" data-arg="${id}" ${s.money < A.cost ? 'disabled' : ''}>Buy $${A.cost}</button>`;
-    else btn = `<button class="mini" disabled>${A.lap ? 'After the lap' : `At ${STOPS[A.from].name}`}</button>`;
+    const A = AIRCRAFT[id], own = s.fleet[id];
+    if (!own) { h += '<div class="row"><div><div class="name">? ? ?</div><p>Not yet yours.</p></div></div>'; continue; }
+    const st = calcStats(id, s.up);
+    const worst = Math.min(...PART_KEYS.map((k) => own.cond[k]));
     h += `<div class="row">
       <div class="name">${A.name} <small>${A.kind}</small></div>
-      <div class="acts">${btn}</div>
+      <div class="acts"><button class="mini" disabled>${id === G.mission.craft ? 'Flying now' : `${Math.round(worst)}% worst part`}</button></div>
       <div>
         <p>${A.blurb}</p>
         <div class="stats"><span>${Math.round(st.speed * (1 + st.space) * 10)} kt</span><span>${fmtAlt(st.ceil)}</span><span>${km(cruiseRange(st, st.tank))} km</span></div>
@@ -189,70 +189,68 @@ function aircraft(G) {
 }
 
 function logbook(G) {
-  let h = '';
-  for (let i = 0; i <= (G.save.best || 0); i++) {
-    const e = STORY[i];
-    h += `<div class="row"><div><div class="name">${e.title}</div>${e.nan ? `<p class="nan">${e.nan}</p>` : ''}<p>${e.you}</p></div></div>`;
+  let h = `<div class="row"><div><div class="name">${INTRO.title}</div><p class="nan">${INTRO.nan}</p>${INTRO.body.map((t) => `<p>${t}</p>`).join('')}</div></div>`;
+  for (let i = 0; i < Math.min(G.save.mission, MISSIONS.length); i++) {
+    const m = MISSIONS[i];
+    h += `<div class="row"><div>${m.ch ? `<small class="chapter">${m.ch}</small>` : ''}<div class="name">${m.title}</div>
+      ${m.arrive.map((t) => `<p>${t}</p>`).join('')}${m.real ? `<p class="note">${m.real}</p>` : ''}</div></div>`;
   }
+  if (G.save.mission >= MISSIONS.length) h += `<div class="row"><div><p>${EPILOGUE}</p></div></div>`;
   return h;
 }
 
 export function planWarnings(G) {
-  const s = G.save, ac = G.ac, st = G.stats;
-  const next = nextStop(s, st);
+  const s = G.save, ac = G.ac, st = G.stats, m = G.mission;
   const out = [];
-  if (next === s.stop) return out;
-  const d = legDist(s.stop, next), b = BIOMES[STOPS[next].biome];
+  if (m.free) return out;
+  const d = missionDist(m), b = BIOMES[targetOf(m).stop.biome];
   const r = cruiseRange(st, ac.fuel);
-  if (r < d) out.push(['bad', `Not enough fuel. Range is ${km(r)} km, the leg is ${km(d)} km.`]);
-  else if (r < d * 1.2) out.push(['warn', `Fuel is tight: ${km(r)} km of range for a ${km(d)} km leg.`]);
+  if (m.transit) { if (ac.fuel < st.tank * 0.6) out.push(['warn', 'Fill the tank. The climb to space is thirsty.']); }
+  else if (r < d) out.push(['bad', `Not enough fuel. Range is ${km(r)} km, the flight is ${km(d)} km.`]);
+  else if (r < d * 1.2) out.push(['warn', `Fuel is tight: ${km(r)} km of range for a ${km(d)} km flight.`]);
   for (const k of PART_KEYS) if (ac.cond[k] < 50) out.push(['warn', `${PARTS[k].name} is worn (${Math.round(ac.cond[k])}%) and likely to fail in the air.`]);
   if (s.kits === 0) out.push(['warn', 'No repair kits aboard.']);
-  if (b.hs > 60 && st.ceil < 25) out.push(['warn', 'Peaks on this leg are higher than this aircraft can climb. Follow the valleys.']);
-  if (b.storm > 0.1 && st.ceil < 31) out.push(['warn', 'Storm cells ahead. This aircraft cannot climb over them, so go round or stay low.']);
-  if (!st.floats && b.sea > 0.56) out.push(['warn', 'Mostly open water. Nowhere to set down if something breaks.']);
+  if (!m.transit && !st.orbit) {
+    if (b.hs > 60 && st.ceil < 28) out.push(['warn', 'Peaks on this flight are higher than this machine can climb. Follow the valleys.']);
+    if (b.storm > 0.1 && st.ceil < 31) out.push(['warn', 'Storm cells ahead. You cannot climb over them, so go round or stay low.']);
+    if (!st.floats && b.sea > 0.56) out.push(['warn', 'Mostly open water. Nowhere to set down if something breaks.']);
+  }
   return out;
 }
 
-function plan(G) {
-  const s = G.save;
-  const next = nextStop(s, G.stats);
-  if (G.stats.orbit && s.done && s.stop === 0) {
-    const w = planWarnings(G).filter(([, t]) => !t.startsWith('Storm') && !t.startsWith('Mostly') && !t.startsWith('Peaks'));
-    return `<div class="row"><div><div class="name">Orbital lap</div>
-      <p>Climb until the sky goes black, let the world turn beneath you, and land back at Wrenfield. ${km(legDist(0, next))} km in one flight.</p>
-      <p>${s.orbitBest ? `Your best lap: ${s.orbitBest} seconds.` : 'Above 100 km the engines idle and you coast.'} Come down gently. A steep re-entry burns the hull.</p></div></div>
-      ${w.length ? w.map(([c, t]) => `<p class="warnline ${c}">▲ ${t}</p>`).join('') : '<p class="okline">Ship is ready for orbit.</p>'}`;
-  }
-  if (next === s.stop) return '<p class="okline">You have flown all the way round the world.</p><p>Take her up for a lap of the home field whenever you like.</p>';
-  const d = legDist(s.stop, next);
-  const w = planWarnings(G);
-  return `<div class="row"><div><div class="name">Next: ${STOPS[next].name}</div>
-      <p>${STOPS[next].tag}. ${km(d)} km east${next > (s.best || 0) ? `, mail contract pays $${legPay(s.best || 0, next)}` : ''}.</p>
-      <p>Leg ${next} of ${STOPS.length - 1}. ${BIOMES[STOPS[next].biome].name}.</p></div></div>
-    ${w.length ? w.map(([c, t]) => `<p class="warnline ${c}">▲ ${t}</p>`).join('') : '<p class="okline">Aircraft is ready for this leg.</p>'}`;
+function mission(G) {
+  const m = G.mission, A = AIRCRAFT[m.craft];
+  if (m.free) return `<div class="row"><div><div class="name">${m.title}</div><p>${EPILOGUE}</p></div></div>`;
+  const t = targetOf(m), d = missionDist(m), w = planWarnings(G);
+  return `<div class="row"><div>
+      <small class="chapter">${G.chapter}</small>
+      <div class="name">${m.title}</div>
+      <p>${m.brief}</p>
+      <p><b>Fly:</b> ${A.name} (${A.kind.toLowerCase()}). <b>To:</b> ${t.stop.name}${t.world !== m.world ? `, ${WORLDS[t.world].name}` : ''}${d ? `, ${km(d)} km` : ''}.${m.pay ? ` <b>Pays:</b> $${m.pay}.` : ''}</p>
+    </div></div>
+    ${w.length ? w.map(([c, x]) => `<p class="warnline ${c}">▲ ${x}</p>`).join('') : `<p class="okline">The ${A.name} is ready.</p>`}`;
 }
 
-const TABS = [['workshop', 'Workshop'], ['upgrades', 'Upgrades'], ['aircraft', 'Aircraft'], ['logbook', 'Logbook'], ['plan', 'Plan']];
-const BODY = { workshop, upgrades, aircraft, logbook, plan };
+const TABS = [['workshop', 'Workshop'], ['skills', 'Skills'], ['fleet', 'Fleet'], ['logbook', 'Logbook'], ['mission', 'Mission']];
+const BODY = { workshop, skills, fleet, logbook, mission };
 
 export function hangarHTML(G) {
-  const s = G.save, stop = STOPS[s.stop];
+  const s = G.save, m = G.mission, w = WORLDS[m.world], stop = w.stops[m.from];
   return `<div class="hangar">
-    <header><div><h2>${stop.name}</h2><small>${stop.tag} · ${AIRCRAFT[s.current].name}</small></div><div class="money">$${s.money}</div></header>
+    <header><div><h2>${stop.name}</h2><small>${w.id === 'earth' ? stop.tag : w.name} · ${AIRCRAFT[m.craft].name}</small></div><div class="money">$${s.money}</div></header>
     <div class="tabs">${TABS.map(([k, n]) => `<button data-act="tab" data-arg="${k}" class="${G.tab === k ? 'on' : ''}">${n}</button>`).join('')}</div>
     <section>${BODY[G.tab](G)}</section>
-    <footer>${G.tab === 'plan'
+    <footer>${G.tab === 'mission'
       ? '<button class="btn primary" data-act="takeoff">Take off</button>'
-      : '<button class="btn primary" data-act="tab" data-arg="plan">Flight plan</button>'}</footer>
+      : '<button class="btn primary" data-act="tab" data-arg="mission">Mission</button>'}</footer>
   </div>`;
 }
 
-// Landed away from an airfield: only the kits you carry are available.
+// Landed away from a landing ground: only the kits you carry are available.
 export function fieldHTML(G, onWater) {
   const s = G.save, ac = G.ac;
   let h = `<div class="hangar">
-    <header><div><h2>${onWater ? 'Afloat' : 'Field landing'}</h2><small>No workshop here. Use what you carry.</small></div><div class="money">Kits ${s.kits}</div></header>
+    <header><div><h2>${onWater ? 'Afloat' : 'Set down in the open'}</h2><small>No workshop here. Use what you carry.</small></div><div class="money">Kits ${s.kits}</div></header>
     <section>`;
   for (const k of PART_KEYS) {
     const v = ac.cond[k];
@@ -263,9 +261,9 @@ export function fieldHTML(G, onWater) {
     </div>`;
   }
   h += `<div class="row"><div class="name">Fuel</div><div class="meter">${bar((ac.fuel / G.stats.tank) * 100)}<span>${Math.round(ac.fuel)}</span></div></div>
-    ${ac.fuel < 1 ? '<p class="warnline bad">▲ The tank is dry. You will have to radio for a tow.</p>' : ''}
+    ${ac.fuel < 1 ? '<p class="warnline bad">▲ The tank is dry. You will have to call for help.</p>' : ''}
     </section>
-    <footer>${ac.fuel < 1 ? '<button class="btn" data-act="tow">Radio for a tow</button>' : '<button class="btn primary" data-act="takeoff">Take off</button>'}</footer>
+    <footer>${ac.fuel < 1 ? '<button class="btn" data-act="tow">Call for help</button>' : '<button class="btn primary" data-act="takeoff">Take off</button>'}</footer>
   </div>`;
   return h;
 }

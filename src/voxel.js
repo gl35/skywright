@@ -2,41 +2,78 @@
 // A model is a small 3D grid of coloured cells. Baking slices it into flat layers
 // (one 2D sprite per height) laid side by side in one atlas canvas. Drawing the
 // layers bottom to top, each nudged up the screen, gives the 3D look with no 3D engine.
+//
+// A model is described in coarse "design" units and stored k times finer, so shapes
+// come out rounder and there is room for small details painted on afterwards.
+
+export const shade = (c, f) =>
+  (Math.min(255, ((c >> 16) & 255) * f) << 16) | (Math.min(255, ((c >> 8) & 255) * f) << 8) | Math.min(255, (c & 255) * f) | 1;
 
 export class Vox {
-  constructor(nx, ny, nz) {
-    this.nx = nx; this.ny = ny; this.nz = nz;
-    this.d = new Uint32Array(nx * ny * nz); // 0 = empty, otherwise 0xRRGGBB (never pure 0)
+  constructor(nx, ny, nz, k = 1) {
+    this.k = k;
+    this.nx = nx * k; this.ny = ny * k; this.nz = nz * k;
+    this.d = new Uint32Array(this.nx * this.ny * this.nz); // 0 = empty, otherwise 0xRRGGBB
   }
-  set(x, y, z, c) {
-    x = Math.round(x); y = Math.round(y); z = Math.round(z);
-    if (x < 0 || y < 0 || z < 0 || x >= this.nx || y >= this.ny || z >= this.nz) return;
-    this.d[x + this.nx * (y + this.ny * z)] = c || 1;
-  }
+  // ---- fine (stored) coordinates ----
   get(x, y, z) {
     if (x < 0 || y < 0 || z < 0 || x >= this.nx || y >= this.ny || z >= this.nz) return 0;
     return this.d[x + this.nx * (y + this.ny * z)];
   }
+  put(x, y, z, c) {
+    if (x < 0 || y < 0 || z < 0 || x >= this.nx || y >= this.ny || z >= this.nz) return;
+    this.d[x + this.nx * (y + this.ny * z)] = c || 1;
+  }
+  // Recolour existing cells: fn(x, y, z, colour) returns a new colour, or nothing to leave it.
+  each(fn) {
+    for (let z = 0; z < this.nz; z++) for (let y = 0; y < this.ny; y++) for (let x = 0; x < this.nx; x++) {
+      const i = x + this.nx * (y + this.ny * z), c = this.d[i];
+      if (!c) continue;
+      const n = fn(x, y, z, c);
+      if (n !== undefined) this.d[i] = n;
+    }
+  }
+  topZ(x, y) { for (let z = this.nz - 1; z >= 0; z--) if (this.d[x + this.nx * (y + this.ny * z)]) return z; return -1; }
+  // Paint the topmost cell of each column in a design-unit rectangle.
+  paintTop(x0, y0, x1, y1, fn) {
+    const k = this.k;
+    for (let y = Math.round(y0 * k); y <= Math.round(y1 * k) + k - 1; y++)
+      for (let x = Math.round(x0 * k); x <= Math.round(x1 * k) + k - 1; x++) {
+        if (x < 0 || y < 0 || x >= this.nx || y >= this.ny) continue;
+        const z = this.topZ(x, y);
+        if (z < 0) continue;
+        const n = fn(x / k, y / k, this.d[x + this.nx * (y + this.ny * z)], z);
+        if (n !== undefined) this.d[x + this.nx * (y + this.ny * z)] = n;
+      }
+  }
+  // ---- design coordinates ----
+  set(x, y, z, c) { this.box(x, y, z, x, y, z, c); }
   box(x0, y0, z0, x1, y1, z1, c) {
-    for (let z = z0; z <= z1; z++) for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) this.set(x, y, z, c);
+    const k = this.k;
+    for (let z = Math.round(z0 * k); z <= Math.round(z1 * k) + k - 1; z++)
+      for (let y = Math.round(y0 * k); y <= Math.round(y1 * k) + k - 1; y++)
+        for (let x = Math.round(x0 * k); x <= Math.round(x1 * k) + k - 1; x++) this.put(x, y, z, c);
   }
   ellipsoid(cx, cy, cz, rx, ry, rz, c) {
-    for (let z = Math.floor(cz - rz); z <= Math.ceil(cz + rz); z++)
-      for (let y = Math.floor(cy - ry); y <= Math.ceil(cy + ry); y++)
-        for (let x = Math.floor(cx - rx); x <= Math.ceil(cx + rx); x++) {
-          const dx = (x - cx) / rx, dy = (y - cy) / ry, dz = (z - cz) / rz;
-          if (dx * dx + dy * dy + dz * dz <= 1) this.set(x, y, z, typeof c === 'function' ? c(x, y, z) : c);
+    const k = this.k, h = (k - 1) / 2;
+    const X = cx * k + h, Y = cy * k + h, Z = cz * k + h, RX = rx * k + h, RY = ry * k + h, RZ = rz * k + h;
+    for (let z = Math.floor(Z - RZ); z <= Math.ceil(Z + RZ); z++)
+      for (let y = Math.floor(Y - RY); y <= Math.ceil(Y + RY); y++)
+        for (let x = Math.floor(X - RX); x <= Math.ceil(X + RX); x++) {
+          const dx = (x - X) / RX, dy = (y - Y) / RY, dz = (z - Z) / RZ;
+          if (dx * dx + dy * dy + dz * dz <= 1) this.put(x, y, z, typeof c === 'function' ? c(Math.floor(x / k), Math.floor(y / k), Math.floor(z / k)) : c);
         }
   }
   // A fuselage: circular cross-sections along x, radius given by rFn(x).
   tube(x0, x1, cy, cz, rFn, c) {
-    for (let x = x0; x <= x1; x++) {
-      const r = rFn(x);
+    const k = this.k, h = (k - 1) / 2, Y = cy * k + h, Z = cz * k + h;
+    for (let x = Math.round(x0 * k); x <= Math.round(x1 * k) + k - 1; x++) {
+      const r = rFn(x / k) * k + h * 0.6;
       if (r <= 0) continue;
-      for (let z = Math.floor(cz - r); z <= Math.ceil(cz + r); z++)
-        for (let y = Math.floor(cy - r); y <= Math.ceil(cy + r); y++) {
-          const dy = y - cy, dz = z - cz;
-          if (dy * dy + dz * dz <= r * r + 0.3) this.set(x, y, z, typeof c === 'function' ? c(x, y, z) : c);
+      for (let z = Math.floor(Z - r); z <= Math.ceil(Z + r); z++)
+        for (let y = Math.floor(Y - r); y <= Math.ceil(Y + r); y++) {
+          const dy = y - Y, dz = z - Z;
+          if (dy * dy + dz * dz <= r * r + 0.3) this.put(x, y, z, typeof c === 'function' ? c(Math.floor(x / k), Math.floor(y / k), Math.floor(z / k)) : c);
         }
     }
   }
@@ -83,10 +120,14 @@ export function bake(vox, { light = true } = {}) {
         if (!c) continue;
         let f = 1;
         if (light) {
-          f = vox.get(x, y, z + 1) ? 0.74 : 1.06; // lit from above
+          f = vox.get(x, y, z + 1) ? 0.72 : 1.06; // lit from above
           if (!vox.get(x, y - 1, z)) f *= 1.05;
-          if (!vox.get(x, y + 1, z)) f *= 0.9;
-          f *= 0.86 + 0.14 * (z / Math.max(1, nz - 1));
+          if (!vox.get(x, y + 1, z)) f *= 0.88;
+          f *= 0.84 + 0.16 * (z / Math.max(1, nz - 1));
+          // soft shadow from anything overhanging: under a top wing, beside a tail fin
+          let occ = 0;
+          for (let h = 2; h <= 5; h++) if (vox.get(x, y, z + h) || vox.get(x + 1, y - 1, z + h)) occ++;
+          f *= 1 - occ * 0.06;
         }
         const o = (y * nx * nz + z * nx + x) * 4;
         img.data[o] = Math.min(255, ((c >> 16) & 255) * f);

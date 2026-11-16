@@ -1,30 +1,41 @@
 // The world: an endless procedural heightmap cut into chunks, plus clouds.
 // Each chunk is baked into one atlas holding a flat image per height level,
 // so the terrain is drawn as a sprite stack just like the aircraft.
+// There are several worlds (Earth, four dynasties, the Moon, Mars, a far shore);
+// one is current at a time and switching throws the cached chunks away.
 
 import { fbm, vnoise, hash2, smoothstep, lerp } from './noise.js';
-import { STOPS, BIOMES } from './data.js';
+import { WORLDS, BIOMES } from './data.js';
 
 export const CH = 48; // cells per chunk side
-export const NL = 12; // height levels 0..11 (0 = water)
+export const NL = 12; // height levels 0..11 (0 = water, or dry low ground)
 export const HZ = 2.2; // world height of one level
 export const TS = CH + 1; // tile size in a chunk atlas (one cell of overlap with the next chunk)
 export const TP = TS + 2; // tile pitch: a clear 1px gutter round each tile stops colours bleeding between tiles
-const SEED = 1337;
+
+let cur = WORLDS.earth;
+const chunks = new Map();
+const cloudCells = new Map();
+export const world = () => cur;
+export function setWorld(id) {
+  if (cur.id === id) return;
+  cur = WORLDS[id];
+  chunks.clear(); cloudCells.clear();
+}
 
 // ---------- biomes ----------
 let mA, mB, mT; // result of the last mix() call (avoids allocating per cell)
 function mix(x) {
-  const n = STOPS.length;
-  if (x <= STOPS[0].x) { mA = mB = BIOMES[STOPS[0].biome]; mT = 0; return; }
+  const S = cur.stops, n = S.length;
+  if (x <= S[0].x) { mA = mB = BIOMES[S[0].biome]; mT = 0; return; }
   for (let i = 0; i < n - 1; i++) {
-    if (x < STOPS[i + 1].x) {
-      mA = BIOMES[STOPS[i].biome]; mB = BIOMES[STOPS[i + 1].biome];
-      mT = smoothstep(0.3, 0.7, (x - STOPS[i].x) / (STOPS[i + 1].x - STOPS[i].x));
+    if (x < S[i + 1].x) {
+      mA = BIOMES[S[i].biome]; mB = BIOMES[S[i + 1].biome];
+      mT = smoothstep(0.3, 0.7, (x - S[i].x) / (S[i + 1].x - S[i].x));
       return;
     }
   }
-  mA = mB = BIOMES[STOPS[n - 1].biome]; mT = 0;
+  mA = mB = BIOMES[S[n - 1].biome]; mT = 0;
 }
 export function biomeParams(x) {
   mix(x);
@@ -40,32 +51,31 @@ let outV, outHs;
 function terrain(x, y, stops) {
   mix(x);
   outHs = lerp(mA.hs, mB.hs, mT);
-  let v = fbm(x / 70, y / 70, SEED, 5) * 0.65 + vnoise(x / 260 + 31.7, y / 260 - 12.3, SEED + 99) * 0.35 - lerp(mA.sea, mB.sea, mT);
+  const seed = cur.seed;
+  let v = fbm(x / 70, y / 70, seed, 5) * 0.65 + vnoise(x / 260 + 31.7, y / 260 - 12.3, seed + 99) * 0.35 - lerp(mA.sea, mB.sea, mT);
   for (let i = 0; i < stops.length; i++) {
     const s = stops[i];
     const dx = (x - s.x) * 0.7, dy = y - s.y;
     const d2 = dx * dx + dy * dy;
-    if (d2 < 8100) v += (1.5 / outHs - v) * smoothstep(90, 40, Math.sqrt(d2)); // flat island under each airfield
+    if (d2 < 8100) v += (1.5 / outHs - v) * smoothstep(90, 40, Math.sqrt(d2)); // flat ground under each landing place
   }
   outV = v;
 }
 const toLevel = (v, hs) => (v > 0 ? Math.min(NL - 1, 1 + Math.floor(v * hs)) : 0);
 
 export function levelAt(x, y) {
-  terrain(Math.floor(x), Math.floor(y), STOPS);
+  terrain(Math.floor(x), Math.floor(y), cur.stops);
   return toLevel(outV, outHs);
 }
 
-// Which stop's runway area is this point in, or -1.
+// Which stop's landing ground is this point on, or -1.
 export function airfieldAt(x, y) {
-  for (let i = 0; i < STOPS.length; i++) {
-    if (Math.abs(x - STOPS[i].x) < 30 && Math.abs(y - STOPS[i].y) < 10) return i;
-  }
+  const S = cur.stops;
+  for (let i = 0; i < S.length; i++) if (Math.abs(x - S[i].x) < 30 && Math.abs(y - S[i].y) < 10) return i;
   return -1;
 }
 
 // ---------- chunks ----------
-const chunks = new Map();
 let genBudget = 0;
 export function beginFrame(budget) { genBudget = budget; }
 
@@ -74,7 +84,7 @@ function genChunk(cx, cy) {
   const lv = new Uint8Array(N * N), vv = new Float32Array(N * N);
   const x0 = cx * CH - 1, y0 = cy * CH - 1;
   const mx = x0 + N / 2, my = y0 + N / 2;
-  const near = STOPS.filter((s) => Math.abs(s.x - mx) < 165 && Math.abs(s.y - my) < 125);
+  const near = cur.stops.filter((s) => Math.abs(s.x - mx) < 165 && Math.abs(s.y - my) < 125);
   for (let iy = 0; iy < N; iy++)
     for (let ix = 0; ix < N; ix++) {
       terrain(x0 + ix, y0 + iy, near);
@@ -89,6 +99,7 @@ function genChunk(cx, cy) {
   const img = ctx.createImageData(W, TP * 2);
   const D = img.data;
   const land = new Float32Array(NL * 3), side = new Float32Array(NL * 3), water = new Float32Array(12);
+  const pad = cur.pad;
   let maxL = 0;
 
   for (let ix = 0; ix < TS; ix++) {
@@ -113,7 +124,8 @@ function genChunk(cx, cy) {
         const depth = -vv[i] + (h - 0.5) * 0.006;
         const shore = lv[i - 1] || lv[i + 1] || lv[i - N] || lv[i + N];
         const w = shore ? 3 : depth < 0.03 ? 2 : depth < 0.075 ? 1 : 0;
-        r = water[w * 3]; g = water[w * 3 + 1]; b = water[w * 3 + 2];
+        const f = cur.water ? 1 : 0.94 + 0.12 * h; // dry basins get a little grain
+        r = water[w * 3] * f; g = water[w * 3 + 1] * f; b = water[w * 3 + 2] * f;
       } else {
         let f = 0.95 + 0.1 * h;
         if (lv[i - 1] > L || lv[i - N] > L) f *= 0.8; // in the shade of higher ground
@@ -121,12 +133,24 @@ function genChunk(cx, cy) {
         if (trees && (L === 4 || L === 5) && h > 0.7) f *= 0.76;
         r = land[L * 3] * f; g = land[L * 3 + 1] * f; b = land[L * 3 + 2] * f;
         if (L === 2) {
-          for (let s = 0; s < near.length; s++) { // paint the runway and apron
+          for (let s = 0; s < near.length; s++) { // paint the landing ground
             const dx = x - near[s].x, dy = y - near[s].y;
-            if (Math.abs(dx) <= 22 && Math.abs(dy) <= 2) {
-              const mark = Math.abs(dx) >= 21 || (dy === 0 && ((dx + 24) & 3) < 2);
-              r = g = b = mark ? 222 : 84 + h * 10; b += 4;
-            } else if (dx >= -12 && dx <= 10 && dy >= -13 && dy <= -3) { r = 158 + h * 8; g = 160 + h * 8; b = 156 + h * 8; }
+            const onStrip = Math.abs(dx) <= 22 && Math.abs(dy) <= 2;
+            const onApron = dx >= -12 && dx <= 10 && dy >= -13 && dy <= -3;
+            if (pad === 'runway') {
+              if (onStrip) { const mark = Math.abs(dx) >= 21 || (dy === 0 && ((dx + 24) & 3) < 2); r = g = b = mark ? 222 : 84 + h * 10; b += 4; }
+              else if (onApron) { r = 158 + h * 8; g = 160 + h * 8; b = 156 + h * 8; }
+            } else if (pad === 'plaza') { // flagstones with a darker border
+              if (Math.abs(dx) <= 22 && Math.abs(dy) <= 4) {
+                const edge = Math.abs(dx) === 22 || Math.abs(dy) === 4, joint = (dx & 3) === 0 || (dy & 3) === 0;
+                const t = edge ? 120 : joint ? 168 : 190 + h * 14;
+                r = t + 6; g = t; b = t - 12;
+              } else if (onApron) { r = 150 + h * 10; g = 132 + h * 10; b = 104 + h * 8; }
+            } else if (Math.abs(dx) <= 22 && Math.abs(dy) <= 4) { // 'pad': dark ground with a yellow outline and centre ring
+              const d = Math.hypot(dx, dy * 2.5);
+              const mark = Math.abs(dx) === 22 || Math.abs(dy) === 4 || (d > 7 && d < 9);
+              if (mark) { r = 232; g = 190; b = 60; } else { r = g = b = 58 + h * 10; }
+            }
           }
         }
       }
@@ -166,24 +190,25 @@ export function getChunk(cx, cy, frame) {
 
 // ---------- clouds ----------
 const CG = 96;
-const cloudCells = new Map();
 function cellClouds(gx, gy) {
   const key = gx + ',' + gy;
   let list = cloudCells.get(key);
   if (list) return list;
   list = [];
-  const bx = gx * CG, by = gy * CG;
-  const p = biomeParams(bx + CG / 2);
-  const stormy = vnoise(gx / 2.5 + 5.1, gy / 2.5 - 3.3, SEED + 7) > 1 - p.storm;
-  const n = stormy ? 2 : (hash2(gx, gy, 21) < p.cloud ? 1 : 0) + (hash2(gx, gy, 22) < p.cloud * 0.4 ? 1 : 0);
-  for (let k = 0; k < n; k++) {
-    const x = bx + hash2(gx, gy, 30 + k) * CG, y = by + hash2(gx, gy, 40 + k) * CG;
-    let storm = stormy && hash2(gx, gy, 50 + k) > 0.25;
-    for (const s of STOPS) if (Math.abs(x - s.x) < 240 && Math.abs(y - s.y) < 240) storm = false; // calm air near fields
-    const variant = Math.floor(hash2(gx, gy, 60 + k) * 100);
-    list.push(storm
-      ? { x, y, storm, variant, vs: 2, alt: 12, top: 30, rad: 26, rot: hash2(gx, gy, 70 + k) * 6.28 }
-      : { x, y, storm, variant, vs: 0.9 + hash2(gx, gy, 80 + k) * 0.7, alt: 13 + hash2(gx, gy, 90 + k) * 12, top: 0, rad: 12, rot: hash2(gx, gy, 70 + k) * 6.28 });
+  if (cur.clouds) {
+    const bx = gx * CG, by = gy * CG;
+    const p = biomeParams(bx + CG / 2);
+    const stormy = vnoise(gx / 2.5 + 5.1, gy / 2.5 - 3.3, cur.seed + 7) > 1 - p.storm;
+    const n = stormy ? 2 : (hash2(gx, gy, 21) < p.cloud ? 1 : 0) + (hash2(gx, gy, 22) < p.cloud * 0.4 ? 1 : 0);
+    for (let k = 0; k < n; k++) {
+      const x = bx + hash2(gx, gy, 30 + k) * CG, y = by + hash2(gx, gy, 40 + k) * CG;
+      let storm = stormy && hash2(gx, gy, 50 + k) > 0.25;
+      for (const s of cur.stops) if (Math.abs(x - s.x) < 240 && Math.abs(y - s.y) < 240) storm = false; // calm air near landing grounds
+      const variant = Math.floor(hash2(gx, gy, 60 + k) * 100);
+      list.push(storm
+        ? { x, y, storm, variant, vs: 2, alt: 12, top: 30, rad: 26, rot: hash2(gx, gy, 70 + k) * 6.28 }
+        : { x, y, storm, variant, vs: 0.9 + hash2(gx, gy, 80 + k) * 0.7, alt: 13 + hash2(gx, gy, 90 + k) * 12, top: 0, rad: 12, rot: hash2(gx, gy, 70 + k) * 6.28 });
+    }
   }
   if (cloudCells.size > 600) cloudCells.clear();
   cloudCells.set(key, list);
