@@ -242,11 +242,23 @@ function drawStreaks(ctx, pl, frac) {
 }
 
 // Things to aim for: the job marker (a ring on the ground with a beam) and the sparks to collect.
-function drawMarks(ctx, marks, time) {
+function drawMarks(ctx, marks, time, scenery) {
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   const diamond = (x, y, s) => { ctx.beginPath(); ctx.moveTo(x, y - s); ctx.lineTo(x + s, y); ctx.lineTo(x, y + s); ctx.lineTo(x - s, y); ctx.fill(); };
   for (const k of marks) {
+    if (k.kind === 'drop') { // a parcel under a little parachute
+      const p = project(k.x, k.y, k.z), s = 2 * U;
+      if (k.z > k.gz + 0.2) { ctx.fillStyle = '#f4f1e6'; ctx.beginPath(); ctx.arc(p[0], p[1] - 4 * U, 4 * U, Math.PI, 0); ctx.fill(); }
+      ctx.fillStyle = '#8a5a34'; ctx.fillRect(p[0] - s, p[1] - s, s * 2, s * 2);
+      continue;
+    }
     if (k.kind === 'task') {
+      if (k.prop) {
+        const mk = scenery.marks[k.prop];
+        drawStack(ctx, mk.m, k.x, k.y, k.gz + (mk.m.nz / 2) * mk.vs + (k.prop === 'boat' || k.prop === 'buoy' ? Math.sin(time * 2) * 0.15 : 0), 0.5, mk.vs);
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+      }
+      if (k.done) continue;
       ctx.lineWidth = 2 * U; ctx.strokeStyle = 'rgba(255,214,74,0.9)';
       ctx.beginPath();
       for (let i = 0; i < 32; i += 2) {
@@ -344,7 +356,7 @@ export function drawScene(ctx, scene) {
   for (const c of cloudList) if (!scene.showPlane || c.alt <= pl.alt) drawCloud(c, false);
   ctx.setTransform(1, 0, 0, 1, 0, 0);
 
-  if (scene.marks && scene.marks.length) drawMarks(ctx, scene.marks, time);
+  if (scene.marks && scene.marks.length) drawMarks(ctx, scene.marks, time, scenery);
   drawStreaks(ctx, pl, scene.speedFrac || 0);
   if (scene.showPlane) {
     drawTrail(ctx, pl, time);

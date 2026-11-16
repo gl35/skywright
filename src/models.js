@@ -402,10 +402,76 @@ function tower() {
   return { m: bake(v), vs: 0.5 };
 }
 
+function lighthouse() {
+  const v = new Vox(7, 7, 17);
+  for (let z = 0; z <= 11; z++) v.box(2, 2, z, 4, 4, z, z % 5 >= 3 ? 0xc8402f : 0xf4f1e6);
+  v.box(1, 1, 12, 5, 5, 12, DARK);
+  v.box(2, 2, 13, 4, 4, 14, 0xffe27a);
+  v.box(2, 2, 15, 4, 4, 15, 0xc8402f); v.put(3, 3, 16, 0xc8402f);
+  v.box(0, 0, 0, 6, 6, 0, 0x8d8f8a);
+  return { m: bake(v, { light: false }), vs: 0.7 };
+}
+function boat(len, hullCol, top) {
+  const v = new Vox(len + 2, 9, 10);
+  for (let x = 1; x <= len; x++) {
+    const w = Math.max(1, Math.round(3 * Math.pow(Math.sin((Math.PI * x) / (len + 1)), 0.5)));
+    v.box(x, 4 - w, 0, x, 4 + w, 2, hullCol);
+    v.box(x, 4 - w + 1, 3, x, 4 + w - 1, 3, 0xb08a58);
+  }
+  top(v, len);
+  return v;
+}
+function fishingBoat() {
+  const v = boat(12, 0x2a5fd0, (b) => { b.box(3, 3, 4, 5, 5, 6, 0xf4f1e6); b.box(8, 4, 4, 8, 4, 9, 0x5c3b22); b.box(9, 4, 6, 10, 4, 8, 0xc8402f); });
+  return { m: bake(v), vs: 0.6 };
+}
+function icebreaker() {
+  const v = boat(22, 0xc8402f, (b) => { b.box(5, 2, 4, 12, 6, 6, 0xf4f1e6); b.box(6, 3, 7, 10, 5, 8, 0xf4f1e6); b.box(8, 4, 9, 9, 4, 9, DARK); b.box(15, 3, 4, 16, 5, 7, 0xffd24a); });
+  return { m: bake(v), vs: 0.8 };
+}
+function buoy() {
+  const v = new Vox(5, 5, 8);
+  v.ellipsoid(2, 2, 1, 2, 2, 1.4, 0xc8402f);
+  v.box(2, 2, 2, 2, 2, 5, 0xffd24a); v.put(2, 2, 6, 0xffe27a); v.box(1, 2, 4, 3, 2, 4, 0xffd24a);
+  return { m: bake(v, { light: false }), vs: 0.7 };
+}
+function tents() {
+  const v = new Vox(16, 9, 6);
+  for (const [x0, col] of [[1, 0xe8d9a8], [9, 0xd9a05a]]) for (let h = 0; h <= 3; h++) v.box(x0 + h, 1 + h, h, x0 + 6 - h, 7 - h, h, h === 3 ? 0xb5563a : col);
+  v.put(8, 4, 0, 0xff9a3c); v.put(8, 4, 1, 0xffe27a);
+  return { m: bake(v), vs: 0.6 };
+}
+function hut() {
+  const v = new Vox(13, 13, 9);
+  storey(v, 6, 6, 0, 3, 3, 0xd8c8a8, ROOF, 3);
+  v.box(10, 9, 0, 10, 9, 6, 0x5c3b22); v.put(10, 9, 7, 0xff9a3c);
+  return { m: bake(v), vs: 0.6 };
+}
+function kite() {
+  const v = new Vox(9, 9, 16);
+  for (let z = 0; z <= 11; z++) v.put(4, 4, z, 0x5c4630);
+  for (let d = 0; d <= 3; d++) v.box(4 - (3 - d), 4 - d, 12, 4 + (3 - d), 4 + d, 12, d % 2 ? 0xf4f1e6 : 0xc8402f);
+  for (let i = 1; i <= 3; i++) v.put(4 - 3 - i, 4, 12 - i, 0xffd24a);
+  return { m: bake(v, { light: false }), vs: 0.6 };
+}
+function rafts() {
+  const v = new Vox(18, 12, 3);
+  for (let y = 1; y <= 10; y++) if (y % 3 !== 0) v.box(1 + (y % 2), y, 0, 15 + (y % 2), y, 0, y % 2 ? 0x8a5a34 : 0x7a4f2e);
+  v.box(7, 4, 1, 9, 6, 1, 0xe8d9a8); v.put(8, 5, 2, 0xc8402f);
+  return { m: bake(v), vs: 0.7 };
+}
+function vent() {
+  const v = new Vox(9, 9, 5);
+  v.ellipsoid(4, 4, 0, 4, 4, 3, (x, y, z) => (z > 1 ? 0xd0602a : 0x4a4040));
+  v.box(3, 3, 2, 5, 5, 3, 0xf0a030); v.put(4, 4, 4, 0xfff3a8);
+  return { m: bake(v, { light: false }), vs: 0.8 };
+}
+
 export function buildScenery() {
   const rng = mulberry32(4242);
   const clouds = {};
   for (const k of Object.keys(CLOUDS)) { clouds[k] = []; for (let i = 0; i < (k === 'white' ? 6 : 4); i++) clouds[k].push(cloud(rng, CLOUDS[k])); }
-  const marks = { hangar: hangar(), tower: tower(), pagoda: pagoda(6), pagodaSmall: pagoda(3), gate: gate(), clock: clock(), ship: ship(), dome: dome(), mast: mast(), spire: spire(), lantern: lantern(), door: door() };
+  const marks = { hangar: hangar(), tower: tower(), pagoda: pagoda(6), pagodaSmall: pagoda(3), gate: gate(), clock: clock(), ship: ship(), dome: dome(), mast: mast(), spire: spire(), lantern: lantern(), door: door(),
+    lighthouse: lighthouse(), boat: fishingBoat(), icebreaker: icebreaker(), buoy: buoy(), tents: tents(), hut: hut(), kite: kite(), rafts: rafts(), vent: vent() };
   return { clouds, marks };
 }

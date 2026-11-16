@@ -42,7 +42,7 @@ const G = {
   tab: 'workshop', legTime: 0, timer: 0, landing: null, onWater: false,
   transited: false, burnT: 0,
   abil: { t: 0, cd: 0 }, surfLabel: '',
-  quiz: null, task: null, sparks: [], chain: 0, bonus: { sparks: 0, cash: 0, task: 0 },
+  quiz: null, task: null, sparks: [], drops: [], chain: 0, bonus: { sparks: 0, cash: 0, task: 0 },
   cards: [], afterCards: null,
   view: 0, sky: 0, heat: 0,
   camRot: -Math.PI / 2, zoom: 3 * ZK, ax: 0.5, ay: 0.7, trailT: 0, puffT: 0, hudT: 0, hintT: 0,
@@ -239,18 +239,18 @@ ui.el.panel.addEventListener('click', (e) => {
 // ---------- things to do on the way ----------
 // Look outward from (x, y) for the nearest spot the test accepts.
 function findSpot(x, y, ok) {
-  for (let r = 0; r <= 260; r += 13)
-    for (let a = 0; a < 6.283; a += 0.52) {
+  for (let r = 0; r <= 340; r += 13)
+    for (let a = 0; a < 6.283; a += 0.4) {
       const px = x + Math.cos(a) * r, py = y + Math.sin(a) * r;
       if (ok(px, py)) return { x: px, y: py };
       if (r === 0) break;
     }
-  return { x, y };
+  return null; // nothing suitable round here
 }
 // Called at take-off: place this flight's job marker and a trail of sparks that weaves and changes height.
 function planExtras() {
   const m = G.mission, st = G.stats;
-  G.task = null; G.sparks = []; G.chain = 0; G.bonus = { sparks: 0, cash: 0, task: 0 };
+  G.task = null; G.sparks = []; G.drops = []; G.chain = 0; G.bonus = { sparks: 0, cash: 0, task: 0 };
   if (m.free || m.transit) { // nothing to place off-route, but a climbing job still makes sense
     const T = TASKS[G.save.mission];
     if (T && T.type === 'high' && !m.free) G.task = { ...T, done: false };
@@ -262,11 +262,21 @@ function planExtras() {
   if (T) {
     if (T.type === 'high') G.task = { ...T, done: false };
     else {
+      // water jobs go on open water; everything else goes on dry ground, never in the sea
       const wet = (x, y) => !levelAt(x, y) && !levelAt(x + 9, y) && !levelAt(x - 9, y) && !levelAt(x, y + 9) && !levelAt(x, y - 9);
-      const dry = (x, y) => { const l = levelAt(x, y); return l >= 2 && l <= 3 && levelAt(x + 6, y) === l && levelAt(x - 6, y) === l; };
-      const any = (x, y) => levelAt(x, y) >= 1;
-      const at = findSpot(A.x + dx * T.t - uy * T.off, A.y + dy * T.t + ux * T.off, T.type === 'land' ? (T.water ? wet : dry) : any);
-      G.task = { ...T, x: at.x, y: at.y, r: T.type === 'land' ? 26 : 22, gz: levelAt(at.x, at.y) * HZ, kind: 'task', done: false };
+      const flat = (x, y) => { const l = levelAt(x, y); return l >= 2 && l <= 3 && levelAt(x + 6, y) === l && levelAt(x - 6, y) === l; };
+      // low ground with no hills crowding it, so there is room to come down over it
+      const dry = (x, y) => { const l = levelAt(x, y); return l >= 1 && l <= 3 && Math.max(levelAt(x + 22, y), levelAt(x - 22, y), levelAt(x, y + 22), levelAt(x, y - 22)) <= l + 2; };
+      const test = T.water ? wet : T.type === 'land' ? flat : dry;
+      let at = null;
+      for (const tt of [T.t, 0.35, 0.65, 0.25, 0.75]) { // try other stretches of the route if the first has nowhere suitable
+        for (const side of [T.off, -T.off]) {
+          at = findSpot(A.x + dx * tt - uy * side, A.y + dy * tt + ux * side, test);
+          if (at) break;
+        }
+        if (at) break;
+      }
+      if (at) G.task = { ...T, x: at.x, y: at.y, r: T.type === 'land' ? 26 : 24, gz: levelAt(at.x, at.y) * HZ, kind: 'task', done: false };
     }
   }
   const n = Math.floor(len / 110);
@@ -284,6 +294,7 @@ function finishTask() {
   G.save.money += t.pay; G.bonus.task += t.pay;
   beep(660, 0.1); setTimeout(() => beep(880, 0.1), 100); setTimeout(() => beep(1320, 0.2), 200);
 }
+const LOW = 12; // how close to the ground counts as low enough for a drop
 // Checked every moment in the air.
 function checkExtras(p, floor) {
   for (const k of G.sparks) {
@@ -296,8 +307,10 @@ function checkExtras(p, floor) {
   const t = G.task;
   if (!t || t.done || t.type === 'land') return;
   const near = t.type === 'high' || Math.hypot(t.x - p.x, t.y - p.y) < t.r;
-  const ok = t.type === 'high' ? p.alt > t.alt : t.type === 'low' ? near && p.alt - floor < 9 : near;
-  if (ok) { finishTask(); ui.setHint(`<b>Done.</b> ${t.after}<br>+$${t.pay}`); G.hintT = 6; }
+  const ok = t.type === 'high' ? p.alt > t.alt : t.type === 'low' ? near && p.alt - floor < LOW : near;
+  if (ok) {
+    if (t.type === 'low') G.drops.push({ kind: 'drop', x: p.x, y: p.y, z: p.alt, gz: t.gz, age: 0 }); // out it goes
+    finishTask(); ui.setHint(`<b>Done.</b> ${t.after}<br>+$${t.pay}`); G.hintT = 6; }
 }
 
 // ---------- in-flight repair ----------
@@ -485,6 +498,10 @@ function updateFlight(dt) {
   else if (p.alt - floor < 2.5 && p.vz < 0 && !nearField) ui.setAlert(lvl === 0 && wet && !st.floats ? 'TOO LOW · PULL UP' : 'LOW');
   else if (G.inCell) ui.setAlert('INSIDE A STORM');
   else if (ac.fuel / st.tank < 0.15) ui.setAlert('LOW FUEL');
+  else if (G.task && !G.task.done && G.task.type === 'low' && Math.hypot(G.task.x - p.x, G.task.y - p.y) < G.task.r * 3)
+    ui.setAlert(p.alt - floor >= LOW ? 'Too high for the drop. Come down low over the ring' : 'Low enough. Fly through the ring', true);
+  else if (G.task && !G.task.done && G.task.type === 'land' && Math.hypot(G.task.x - p.x, G.task.y - p.y) < G.task.r * 3)
+    ui.setAlert(p.speed > st.speed * 0.8 ? 'Throttle back, then set down inside the ring' : 'Set down inside the ring', true);
   else if (!dest) ui.setAlert(p.alt > 170 ? `Hold this height. Lining up the burn: ${Math.ceil(6 - G.burnT)}` : 'Climb until the sky is black, then hold', true);
   else if (thin > 0 && dist < 400 + p.alt * 25) ui.setAlert(`${dest.name} is coming up. Start a gentle descent`, true);
   else if (orbiting) ui.setAlert('In orbit. Engines idling', true);
@@ -634,6 +651,11 @@ function updateEffects(dt, airborne) {
     G.puffT = hot ? 0.03 : 0.07;
     G.puffs.push({ x: p.x, y: p.y, z: visAlt(p.alt), age: 0, dark: !hot && (G.mode !== 'down' || Math.random() < 0.6) });
   }
+  for (let i = G.drops.length - 1; i >= 0; i--) { // parcels drift down and sit for a moment
+    const d = G.drops[i];
+    d.z = Math.max(d.gz, d.z - 7 * dt);
+    if (d.z <= d.gz) { d.age += dt; if (d.age > 4) G.drops.splice(i, 1); }
+  }
   for (let i = G.puffs.length - 1; i >= 0; i--) {
     const pf = G.puffs[i];
     pf.age += dt; pf.z += dt * 1.5;
@@ -648,7 +670,8 @@ const markList = [];
 function marksNear(p) {
   markList.length = 0;
   const t = G.task;
-  if (t && !t.done && t.kind && Math.hypot(t.x - p.x, t.y - p.y) < 420) markList.push(t);
+  if (t && t.kind && Math.hypot(t.x - p.x, t.y - p.y) < 420) markList.push(t); // stays on the map after the job is done
+  for (const d of G.drops) markList.push(d);
   for (const k of G.sparks) if (!k.got && Math.abs(k.x - p.x) < 300 && Math.abs(k.y - p.y) < 420) markList.push(k);
   return markList;
 }
