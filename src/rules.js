@@ -24,11 +24,15 @@ export function calcStats(id, up) {
 
 // The mission the player is on. Once the story is finished this is a free flight at the last landing ground.
 export function missionOf(save) {
+  if (save.visit) { // through the Ark's door for a look round: no errand, just the place
+    return { free: true, excursion: true, title: `A visit to ${WORLDS[save.visit].name}`, world: save.visit, from: 0, to: 0, craft: 'ark', pay: 0,
+      brief: 'No errand this time. Explore, fly low over the blue beams to see what is there, and fly back through the glowing door when you have had enough.' };
+  }
   if (save.mission < MISSIONS.length) return MISSIONS[save.mission];
   return { free: true, title: 'Free flight', world: 'deep', from: 0, to: 0, craft: 'starling', pay: 0, brief: 'Nothing left to deliver. Fly for the joy of it.' };
 }
 // Can this machine be taken on this mission? You must own it, and only a star raft can leave the world.
-export const canFly = (save, m, id) => !!save.fleet[id] && (!m.transit || !!AIRCRAFT[id].orbit);
+export const canFly = (save, m, id) => !!save.fleet[id] && (!m.transit || !!AIRCRAFT[id].orbit) && (!m.excursion || id === 'ark'); // the door is in the Ark
 
 // Where a mission ends: { world, stop } with the stop's data.
 export function targetOf(m) {

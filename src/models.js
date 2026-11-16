@@ -492,11 +492,25 @@ function vent() {
   return { m: bake(v, { light: false }), vs: 0.8 };
 }
 
+// The pilot: leather jacket, flying helmet, red scarf. pose 0 and 1 are two steps of a walk, 2 is bent to a job.
+function person(pose) {
+  const v = new Vox(4, 3, 8);
+  const JACKET = 0x7a4f2e, TROUSER = 0x3d4252, SKIN = 0xe8b890, HELMET = 0x4a3524, SCARF = 0xc8402f;
+  const stride = pose === 0 ? [0, 1] : pose === 1 ? [1, 0] : [0, 0];
+  v.box(1 + stride[0], 0, 0, 1 + stride[0], 0, 2, TROUSER); v.box(1 + stride[1], 2, 0, 1 + stride[1], 2, 2, TROUSER);
+  v.box(1, 0, 3, 1, 2, 5, JACKET);
+  if (pose === 2) { v.put(2, 0, 4, SKIN); v.put(2, 2, 4, SKIN); v.put(3, 1, 4, 0x8a8f9c); } // arms out, spanner in hand
+  v.put(0, 1, 5, SCARF);
+  v.put(1, 1, 6, SKIN); v.put(2, 1, 6, 0x33343c); // face and goggles
+  v.put(1, 1, 7, HELMET);
+  return bake(v, { light: false });
+}
+
 export function buildScenery() {
   const rng = mulberry32(4242);
   const clouds = {};
   for (const k of Object.keys(CLOUDS)) { clouds[k] = []; for (let i = 0; i < (k === 'white' ? 6 : 4); i++) clouds[k].push(cloud(rng, CLOUDS[k])); }
   const marks = { hangar: hangar(), tower: tower(), pagoda: pagoda(6), pagodaSmall: pagoda(3), gate: gate(), clock: clock(), ship: ship(), dome: dome(), mast: mast(), spire: spire(), lantern: lantern(), door: door(),
     lighthouse: lighthouse(), boat: fishingBoat(), icebreaker: icebreaker(), buoy: buoy(), tents: tents(), hut: hut(), kite: kite(), rafts: rafts(), vent: vent() };
-  return { clouds, marks };
+  return { clouds, marks, pilot: [person(0), person(1), person(2)] };
 }

@@ -1,7 +1,7 @@
 // Skywright: game state, flight model and the main loop.
 
 import './style.css';
-import { TASKS, WORLDS, AIRCRAFT, PARTS, PART_KEYS, MISSIONS, INTRO, START_SAVE, KIT_COST, KIT_CAP_COST, KIT_CAP_MAX } from './data.js';
+import { ERA_FINDS, TASKS, WORLDS, AIRCRAFT, PARTS, PART_KEYS, MISSIONS, INTRO, START_SAVE, KIT_COST, KIT_CAP_COST, KIT_CAP_MAX } from './data.js';
 import { canFly, calcStats, repairCost, fuelCost, upCost, missionOf, targetOf, thinAir, km, jobPay } from './rules.js';
 import { aircraftModel, buildScenery } from './models.js';
 import { V, resizeView, watchSpeed, setCamera, drawScene, screenBearing, cloudsNow, project } from './render.js';
@@ -42,7 +42,9 @@ const G = {
   tab: 'workshop', legTime: 0, timer: 0, landing: null, onWater: false,
   transited: false, burnT: 0,
   abil: { t: 0, cd: 0 }, surfLabel: '',
-  quiz: null, task: null, sparks: [], drops: [], chain: 0, bonus: { sparks: 0, cash: 0, task: 0 },
+  pilot: { t: 0, work: 0 },
+  fx: [], fxT: 0, shakeT: 0, bounce: 0,
+  quiz: null, task: null, sparks: [], drops: [], finds: [], portal: null, chain: 0, bonus: { sparks: 0, cash: 0, task: 0 },
   cards: [], afterCards: null,
   view: 0, sky: 0, heat: 0,
   camRot: -Math.PI / 2, zoom: 3 * ZK, ax: 0.5, ay: 0.7, trailT: 0, puffT: 0, hudT: 0, hintT: 0,
@@ -174,6 +176,7 @@ const actions = {
     if (G.save.money < c) return;
     G.save.money -= c;
     G.ac.cond[k] = Math.min(100, G.ac.cond[k] + n);
+    G.pilot.work = 3;
   },
   kit() { const s = G.save; if (s.kits < s.kitCap && s.money >= KIT_COST) { s.money -= KIT_COST; s.kits++; } },
   kitcap() { const s = G.save; if (s.kitCap < KIT_CAP_MAX && s.money >= KIT_CAP_COST) { s.money -= KIT_CAP_COST; s.kitCap++; } },
@@ -208,7 +211,7 @@ const actions = {
     if (ok) { beep(880, 0.1); setTimeout(() => beep(1180, 0.14), 90); } else beep(150, 0.25, 'sawtooth');
     ui.showPanel(ui.quizResultHTML(q, ok, ok ? good : bad, G.mode === 'field' ? 'Back to camp' : 'Back to the workshop'));
   },
-  quizdone() { G.quiz = null; },
+  quizdone() { G.quiz = null; G.pilot.work = 2.5; },
   upgrade(k) {
     const s = G.save, lv = s.up[k];
     if (lv >= 3 || s.money < upCost(lv)) return;
@@ -222,9 +225,22 @@ const actions = {
     s.kits--;
     G.ac.cond[k] = Math.min(100, G.ac.cond[k] + 30);
     G.fail[k] = false;
+    G.pilot.work = 3;
   },
-  fieldbodge(k) { G.fail[k] = false; G.ac.cond[k] = Math.max(G.ac.cond[k], 8); },
+  fieldbodge(k) { G.pilot.work = 3; G.fail[k] = false; G.ac.cond[k] = Math.max(G.ac.cond[k], 8); },
   tow() { towBack('tow'); },
+  door(w) { // turn the key: the Ark goes through its own door to another year
+    const s = G.save;
+    s.visit = w; s.pick = null;
+    beep(520, 0.1); setTimeout(() => beep(780, 0.1), 110); setTimeout(() => beep(1040, 0.25), 220);
+    ui.flash();
+    showCards([{ ch: 'The door', title: WORLDS[w].name, body: ['You turn the brass key and take the Ark through its own door. The air changes first: woodsmoke, wet earth, and not one engine anywhere under the sky.', 'Nothing is asked of you here. Look round.'], btn: 'Step out' }], enterHangar);
+  },
+  doorhome() {
+    G.save.visit = null;
+    ui.flash();
+    showCards([{ ch: 'The door', title: 'Back to your own year', body: ['The meadow folds away behind you like a page turning, and the door clicks shut.'], btn: 'Carry on' }], enterHangar);
+  },
   fly(id) { // take a different machine from the fleet
     const s = G.save;
     if (!canFly(s, G.mission, id)) return;
@@ -272,6 +288,56 @@ ui.el.panel.addEventListener('click', (e) => {
   if (G.mode === before && (G.mode === 'hangar' || G.mode === 'field')) { persist(); if (!G.quiz) refresh(); }
 });
 
+// ---------- effects: wakes, splashes, dust, explosions ----------
+const rnd = (a, b) => a + Math.random() * (b - a);
+function burst(n, x, y, z, o) { // n particles flung outward from a point
+  for (let i = 0; i < n; i++) {
+    const a = Math.random() * 6.283, v = rnd(o.v0, o.v1);
+    G.fx.push({ kind: 'dot', x, y, z, vx: Math.cos(a) * v, vy: Math.sin(a) * v, vz: rnd(o.up0 || 0, o.up1 || 0), g: o.g || 0, age: 0, life: rnd(o.life * 0.7, o.life * 1.2),
+      size: o.size || 2, col: Array.isArray(o.col) ? o.col[i % o.col.length] : o.col, grow: o.grow, alpha: o.alpha, under: o.under });
+  }
+}
+const ring = (x, y, size, life = 1.4) => G.fx.push({ kind: 'ring', x, y, z: 0.05, vx: 0, vy: 0, vz: 0, age: 0, life, size, under: true });
+function splash(x, y, big) {
+  burst(big ? 40 : 22, x, y, 0.3, { v0: 1.5, v1: big ? 8 : 5, up0: 4, up1: big ? 13 : 9, g: 16, life: 0.9, col: '255,255,255', size: 2 });
+  ring(x, y, big ? 14 : 8); ring(x, y, big ? 9 : 5, 1);
+}
+const dust = (x, y, z, n = 18) => burst(n, x, y, z, { v0: 1.5, v1: 5, up0: 0.5, up1: 2, life: 0.9, col: '205,185,145', size: 2, grow: 2, alpha: 0.6 });
+function explode(x, y, z) {
+  burst(36, x, y, z, { v0: 3, v1: 12, up0: 3, up1: 12, g: 13, life: 0.9, col: ['255,236,150', '255,160,60', '255,96,40'], size: 2 });
+  burst(16, x, y, z, { v0: 0.5, v1: 3, up0: 2, up1: 5, life: 1.9, col: '40,40,46', size: 3, grow: 2.5, alpha: 0.7 });
+  burst(10, x, y, z, { v0: 3, v1: 8, up0: 5, up1: 11, g: 15, life: 1.2, col: '60,50,46', size: 2 });
+}
+// Called every frame: move the particles on, and lay a wake behind anything moving on (or just above) water.
+function updateFx(dt) {
+  for (let i = G.fx.length - 1; i >= 0; i--) {
+    const f = G.fx[i];
+    f.age += dt;
+    if (f.age >= f.life) { G.fx.splice(i, 1); continue; }
+    f.x += f.vx * dt; f.y += f.vy * dt; f.z += f.vz * dt;
+    if (f.g) { f.vz -= f.g * dt; if (f.z < 0) { f.z = 0; f.vz = 0; f.vx *= 0.5; f.vy *= 0.5; } }
+  }
+  G.shakeT = Math.max(0, G.shakeT - dt);
+  G.bounce = Math.max(0, G.bounce - dt * 1.4);
+  if (!G.model || G.mode === 'title' || G.fx.length > 400) return;
+  const p = G.plane, lvl = levelAt(p.x, p.y);
+  if (lvl !== 0 || !world().water) return;
+  const agl = p.alt - G.belly; // height of the hull above the water
+  const afloat = agl < 0.6, skimming = agl < 3.2 && G.mode === 'flying';
+  if (!afloat && !skimming) return;
+  G.fxT -= dt;
+  if (G.fxT > 0) return;
+  const ch = Math.cos(p.heading), sh = Math.sin(p.heading), half = (G.model.nx * G.model.vs) / 2;
+  if (p.speed > 0.8) { // a V of foam from the stern (or spray from the wind of a low pass)
+    G.fxT = 0.045;
+    for (const side of [-1, 1]) {
+      G.fx.push({ kind: 'dot', x: p.x - ch * half * 0.5 - sh * side * 1.2, y: p.y - sh * half * 0.5 + ch * side * 1.2, z: 0.05,
+        vx: -sh * side * 1.6 - ch * 0.6, vy: ch * side * 1.6 - sh * 0.6, vz: 0, age: 0, life: afloat ? 1.7 : 0.8, size: afloat ? 2 : 1.5, col: '255,255,255', alpha: afloat ? 0.75 : 0.4, grow: 0.6, under: true });
+    }
+    if (afloat && Math.random() < 0.3) burst(1, p.x + ch * half * 0.7, p.y + sh * half * 0.7, 0.2, { v0: 0.5, v1: 2, up0: 2, up1: 4, g: 12, life: 0.5, col: '255,255,255', size: 1.5 }); // bow spray
+  } else if (afloat) { G.fxT = 0.9; ring(p.x, p.y, 6 + Math.random() * 3); } // sitting still: slow ripples
+}
+
 // ---------- things to do on the way ----------
 // Look outward from (x, y) for the nearest spot the test accepts.
 function findSpot(x, y, ok) {
@@ -287,6 +353,22 @@ function findSpot(x, y, ok) {
 function planExtras() {
   const m = G.mission, st = G.stats;
   G.task = null; G.sparks = []; G.drops = []; G.chain = 0; G.bonus = { sparks: 0, cash: 0, task: 0 };
+  G.finds = []; G.portal = null;
+  if (m.excursion) { // a visit through the door: things to find, a ring of sparks, and the door home hanging in the sky
+    const h = world().stops[0], found = (G.save.found = G.save.found || {});
+    const low = (x, y) => { const l = levelAt(x, y); return l >= 1 && l <= 3; };
+    ERA_FINDS[m.world].forEach((f, i) => {
+      const a = 0.6 + i * 2.1, d = 230 + i * 90;
+      const at = findSpot(h.x + Math.cos(a) * d, h.y + Math.sin(a) * d, low);
+      if (at) G.finds.push({ ...f, kind: 'task', col: '120,230,255', x: at.x, y: at.y, r: 20, gz: levelAt(at.x, at.y) * HZ, done: !!found[f.id] });
+    });
+    for (let i = 0; i < 16; i++) {
+      const a = (i / 16) * 6.283, x = h.x + Math.cos(a) * 150, y = h.y + Math.sin(a) * 120, gz = levelAt(x, y) * HZ;
+      G.sparks.push({ kind: 'spark', x, y, gz, z: gz + 7 + (i % 3) * 4, got: false });
+    }
+    G.portal = { kind: 'portal', x: h.x + 60, y: h.y - 45, gz: levelAt(h.x + 60, h.y - 45) * HZ, z: 2 * HZ + 15 };
+    return;
+  }
   if (m.free || m.transit) { // nothing to place off-route, but a climbing job still makes sense
     const T = TASKS[G.save.mission];
     if (T && T.type === 'high' && !m.free) G.task = { ...T, done: false };
@@ -334,6 +416,21 @@ function finishTask() {
 const LOW = 12; // how close to the ground counts as low enough for a drop
 // Checked every moment in the air.
 function checkExtras(p, floor) {
+  for (const f of G.finds) { // a curiosity: come down low over its beam
+    if (f.done || Math.hypot(f.x - p.x, f.y - p.y) > f.r || p.alt - floor > LOW + 2) continue;
+    f.done = true;
+    G.save.found[f.id] = true; G.save.money += 150;
+    persist();
+    beep(660, 0.1); setTimeout(() => beep(990, 0.1), 100); setTimeout(() => beep(1320, 0.25), 200);
+    showCards([{ ch: 'Curiosity', title: f.title, body: [f.text, '<b>+$150</b> for the sketch you send home.'], note: f.note, btn: 'Fly on' }], () => { G.mode = 'flying'; ui.el.hud.classList.remove('hidden'); });
+    return;
+  }
+  const d = G.portal;
+  if (d && G.legTime > 6 && Math.hypot(d.x - p.x, d.y - p.y) < 9 && Math.abs(d.z - p.alt) < 9) { // through the door in the sky
+    beep(1040, 0.1); setTimeout(() => beep(780, 0.1), 110); setTimeout(() => beep(520, 0.25), 220);
+    actions.doorhome();
+    return;
+  }
   for (const k of G.sparks) {
     if (k.got || Math.abs(k.x - p.x) > 7 || Math.abs(k.y - p.y) > 7 || Math.abs(k.z - p.alt) > 5) continue;
     k.got = true;
@@ -577,6 +674,8 @@ function touchdown(lvl, was) {
   if (res === 'ditch' || res === 'crash') {
     G.mode = 'down';
     thud(0.9, 1.1); ui.flash();
+    G.shakeT = 0.7;
+    if (res === 'ditch') splash(p.x, p.y, true); else explode(p.x, p.y, p.alt);
   } else {
     let dmg = hard ? 10 : 0;
     if (res === 'field' && !st.hover) {
@@ -589,6 +688,9 @@ function touchdown(lvl, was) {
     c.frame = Math.max(0, c.frame - dmg);
     G.mode = 'rollout';
     thud(hard || rough ? 0.5 : 0.2, 0.3);
+    if (res === 'water') splash(p.x, p.y, hard);
+    else dust(p.x, p.y, p.alt - G.belly, hard || rough ? 26 : 7);
+    if (hard || rough) { G.shakeT = 0.35; G.bounce = 1; } // a hard arrival: she bounces
   }
 }
 
@@ -602,8 +704,10 @@ function updateRollout(dt) {
   const nx = p.x + Math.cos(p.heading) * p.speed * dt, ny = p.y + Math.sin(p.heading) * p.speed * dt;
   const here = levelAt(p.x, p.y);
   if (levelAt(nx, ny) === here) { p.x = nx; p.y = ny; } else p.speed = 0; // stop at the edge of the flat ground
-  p.alt = here * HZ + G.belly;
-  if (p.speed <= 0.3) resolveLanding();
+  const hop = G.bounce > 0 ? Math.abs(Math.sin(G.bounce * 9)) * 1.6 * G.bounce : 0;
+  if (hop < 0.05 && G.bounce > 0.1 && G.bounce < 0.95 && Math.random() < dt * 8) { if (here === 0 && world().water) splash(p.x, p.y, false); else dust(p.x, p.y, here * HZ, 6); } // each time she comes back down
+  p.alt = here * HZ + G.belly + hop;
+  if (p.speed <= 0.3 && G.bounce <= 0) resolveLanding();
 }
 
 // The mission's flight is done: pay, tell the next part of the story, move on.
@@ -692,6 +796,7 @@ function updateDemo(dt) {
 
 function updateEffects(dt, airborne) {
   const p = G.plane, m = G.model;
+  updateFx(dt);
   p.spin += dt * (5 + 38 * p.throttle) * p.propSpin;
   G.trailT -= dt;
   if (G.trailT <= 0) {
@@ -727,12 +832,41 @@ function updateEffects(dt, airborne) {
 // ---------- main loop ----------
 function angDiff(a, b) { let d = (a - b) % (Math.PI * 2); if (d > Math.PI) d -= Math.PI * 2; if (d < -Math.PI) d += Math.PI * 2; return d; }
 
+// Where the pilot is when the aircraft is down: walking round it on land and stopping to work,
+// or out on the wing if it is sitting on water. Returns null when they are in the cockpit.
+function pilotNow(dt) {
+  const p = G.plane, m = G.model, P = G.pilot;
+  if (!G.save || !(G.mode === 'hangar' || G.mode === 'field' || G.mode === 'cards')) return null;
+  const lvl = levelAt(p.x, p.y);
+  if (p.alt - (lvl * HZ + G.belly) > 0.8) return null; // still in the air
+  P.t += dt; P.work = Math.max(0, P.work - dt);
+  const ch = Math.cos(p.heading), sh = Math.sin(p.heading);
+  const half = (m.nx * m.vs) / 2, span = m.tips * m.vs;
+  const busy = P.work > 0 || P.t % 11 < 2.6; // working because you asked, or just tinkering
+  if (busy && Math.random() < dt * 6) G.puffs.push({ x: p.x + ch * half * 0.8, y: p.y + sh * half * 0.8, z: p.alt, age: 0.5, dark: false });
+  if (lvl === 0 && world().water) { // nowhere to stand but the wing
+    const k = Math.sin(P.t * 0.4), d = Math.cos(P.t * 0.4);
+    const side = busy ? 0.25 * span : k * span * 0.6;
+    return { x: p.x - sh * side + ch * 0.5, y: p.y + ch * side + sh * 0.5, z: p.alt + G.belly * 0.3, rot: busy ? p.heading : p.heading + (d > 0 ? Math.PI / 2 : -Math.PI / 2), pose: busy ? 2 : Math.floor(P.t * 4) % 2, onTop: true };
+  }
+  // on land: a slow circuit of the machine, ending each lap with some work at the nose
+  const walked = P.t - 2.6 * Math.floor(P.t / 11) - Math.min(P.t % 11, 2.6);
+  const a = P.work > 0 ? 0.25 : walked * 0.45 + 0.25;
+  const rx = half + 2.2, ry = span * 0.55 + 2.4;
+  const lx = Math.cos(a) * rx, ly = Math.sin(a) * ry;
+  const x = p.x + ch * lx - sh * ly, y = p.y + sh * lx + ch * ly;
+  const face = busy ? Math.atan2(p.y - y, p.x - x) : p.heading + Math.atan2(Math.cos(a) * ry, -Math.sin(a) * rx);
+  return { x, y, z: levelAt(x, y) * HZ, rot: face, pose: busy ? 2 : Math.floor(P.t * 4) % 2, onTop: false };
+}
+
 const markList = [];
 function marksNear(p) {
   markList.length = 0;
   const t = G.task;
   if (t && t.kind && Math.hypot(t.x - p.x, t.y - p.y) < 420) markList.push(t); // stays on the map after the job is done
   for (const d of G.drops) markList.push(d);
+  for (const f of G.finds) if (Math.hypot(f.x - p.x, f.y - p.y) < 480) markList.push(f);
+  if (G.portal) markList.push(G.portal);
   for (const k of G.sparks) if (!k.got && Math.abs(k.x - p.x) < 300 && Math.abs(k.y - p.y) < 420) markList.push(k);
   return markList;
 }
@@ -748,7 +882,20 @@ function tick(dt) {
   else if (G.mode === 'flying') updateFlight(dt);
   else if (G.mode === 'surface') updateSurface(dt);
   else if (G.mode === 'rollout') updateRollout(dt);
-  else if (G.mode === 'down') { G.timer += dt; p.propSpin = 0; if (G.timer > 1.7) resolveLanding(); }
+  else if (G.mode === 'down') { // the wreck: cartwheeling and burning on land, settling and sinking at sea
+    G.timer += dt; p.propSpin = 0;
+    const ditch = G.landing && G.landing.res === 'ditch';
+    if (ditch) {
+      p.speed *= 1 - Math.min(1, dt * 3); p.alt -= dt * 1.1; p.roll = lerp(p.roll, 0.5, Math.min(1, dt * 2));
+      if (Math.random() < dt * 5) ring(p.x + rnd(-3, 3), p.y + rnd(-3, 3), rnd(3, 6), 1);
+    } else {
+      const k = Math.max(0, 1 - G.timer / 1.5);
+      p.heading += dt * 9 * k; p.roll = Math.sin(G.timer * 14) * 0.7 * k; p.speed *= 1 - Math.min(1, dt * 4);
+      p.x += Math.cos(p.heading) * p.speed * dt * 0.3; p.y += Math.sin(p.heading) * p.speed * dt * 0.3;
+      if (Math.random() < dt * 14) burst(1, p.x + rnd(-2, 2), p.y + rnd(-2, 2), p.alt, { v0: 0, v1: 1, up0: 2, up1: 5, life: 1.3, col: Math.random() < 0.4 ? '255,150,50' : '40,40,46', size: 3, grow: 2, alpha: 0.7 });
+    }
+    if (G.timer > 2.3) resolveLanding();
+  }
   ui.updateFix(dt);
 }
 
@@ -791,13 +938,13 @@ function frame(now, once) {
 
   const realAlt = p.alt;
   p.alt = visAlt(realAlt); // draw with the compressed height, then put the real one back
-  const shake = G.mode === 'flying' && p.throttle > 0.85 ? (p.throttle - 0.85) * 5 : 0; // the airframe buzzes at full power
+  const shake = (G.mode === 'flying' && p.throttle > 0.85 ? (p.throttle - 0.85) * 5 : 0) + G.shakeT * 22 * V.q; // engine buzz, and the jolt of a hard arrival // the airframe buzzes at full power
   setCamera(p.x, p.y, p.alt, G.camRot, G.zoom, G.ax + ((Math.random() - 0.5) * shake) / V.W, G.ay + ((Math.random() - 0.5) * shake) / V.H);
   drawScene(cockpit ? cockpitCtx : ctx, {
     time: G.time, frame: G.frame, plane: p, model: G.model, scenery: G.scenery, puffs: G.puffs,
     inStorm: G.mode === 'flying' && (G.inCell || G.underCell), showPlane: !cockpit, budget: G.frame < G.boost ? 40 : 3,
     sky: G.sky, skyH: vw.skyH, dark, speedFrac: airborne ? frac : 0,
-    marks: inFlight ? marksNear(p) : null,
+    marks: inFlight ? marksNear(p) : null, pilot: pilotNow(dt), fx: G.fx,
   });
   if (cockpit) { // tip the whole outside world with the bank, then draw the cockpit level on top
     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -830,7 +977,12 @@ function frame(now, once) {
       if (d) ui.updateHud(G, screenBearing(p.x, p.y, d.x, d.y), `${d.name}  ${km(Math.hypot(d.x - p.x, d.y - p.y))} km`, input.throttle);
       else ui.updateHud(G, null, 'Climb to the black sky', input.throttle);
       const job = G.task && !G.task.done && G.mode !== 'rollout' && G.mode !== 'down' ? G.task : null, O = ui.el.objective;
-      O.classList.toggle('hidden', !job);
+      const trip = G.mission.excursion && G.mode !== 'rollout' && G.mode !== 'down';
+      O.classList.toggle('hidden', !job && !trip);
+      if (trip) {
+        const txt = `\u25c6 Curiosities ${G.finds.filter((f) => f.done).length}/${G.finds.length}: fly low over a blue beam. The glowing door takes you home`;
+        if (O.textContent !== txt) O.textContent = txt;
+      }
       if (job) {
         const where = job.kind ? ` ${ARROWS[((Math.round(screenBearing(p.x, p.y, job.x, job.y) / (Math.PI / 4)) % 8) + 8) % 8]} ${km(Math.hypot(job.x - p.x, job.y - p.y))} km` : '';
         const txt = `\u25c6 ${job.label}${where}`;

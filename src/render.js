@@ -246,6 +246,20 @@ function drawMarks(ctx, marks, time, scenery) {
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   const diamond = (x, y, s) => { ctx.beginPath(); ctx.moveTo(x, y - s); ctx.lineTo(x + s, y); ctx.lineTo(x, y + s); ctx.lineTo(x - s, y); ctx.fill(); };
   for (const k of marks) {
+    if (k.kind === 'portal') { // the door home: a tall glowing oval with light turning inside it
+      const g = project(k.x, k.y, k.gz), gx = g[0], gy = g[1];
+      const p = project(k.x, k.y, k.z), w = 4.5 * V.zoom, h = 8 * V.zoom * V.elev;
+      ctx.strokeStyle = 'rgba(143,246,255,0.25)'; ctx.lineWidth = 2 * U;
+      ctx.beginPath(); ctx.moveTo(gx, gy); ctx.lineTo(p[0], p[1] + h); ctx.stroke();
+      const gr = ctx.createRadialGradient(p[0], p[1], 0, p[0], p[1], h);
+      gr.addColorStop(0, 'rgba(255,255,255,0.95)'); gr.addColorStop(0.45, 'rgba(143,246,255,0.75)'); gr.addColorStop(1, 'rgba(60,120,255,0.1)');
+      ctx.fillStyle = gr;
+      ctx.beginPath(); ctx.ellipse(p[0], p[1], w, h, 0, 0, 6.283); ctx.fill();
+      ctx.strokeStyle = '#d9a441'; ctx.lineWidth = 3 * U; ctx.stroke(); // brass frame
+      ctx.fillStyle = '#ffffff';
+      for (let i = 0; i < 14; i++) { const a = time * 2.4 + i * 0.9, q = ((i * 0.071 + time * 0.25) % 1); ctx.fillRect(p[0] + Math.cos(a) * w * q, p[1] + Math.sin(a) * h * q, 2 * U, 2 * U); }
+      continue;
+    }
     if (k.kind === 'drop') { // a parcel under a little parachute
       const p = project(k.x, k.y, k.z), s = 2 * U;
       if (k.z > k.gz + 0.2) { ctx.fillStyle = '#f4f1e6'; ctx.beginPath(); ctx.arc(p[0], p[1] - 4 * U, 4 * U, Math.PI, 0); ctx.fill(); }
@@ -259,7 +273,8 @@ function drawMarks(ctx, marks, time, scenery) {
         ctx.setTransform(1, 0, 0, 1, 0, 0);
       }
       if (k.done) continue;
-      ctx.lineWidth = 2 * U; ctx.strokeStyle = 'rgba(255,214,74,0.9)';
+      const col = k.col || '255,214,74';
+      ctx.lineWidth = 2 * U; ctx.strokeStyle = `rgba(${col},0.9)`;
       ctx.beginPath();
       for (let i = 0; i < 32; i += 2) {
         const a0 = (i / 32) * 6.283 + time * 0.3, a1 = ((i + 1) / 32) * 6.283 + time * 0.3;
@@ -270,9 +285,9 @@ function drawMarks(ctx, marks, time, scenery) {
       let p = project(k.x, k.y, k.gz);
       const x0 = p[0], y0 = p[1];
       p = project(k.x, k.y, k.gz + 40);
-      ctx.strokeStyle = 'rgba(255,214,74,0.35)'; ctx.lineWidth = 3 * U;
+      ctx.strokeStyle = `rgba(${col},0.35)`; ctx.lineWidth = 3 * U;
       ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(p[0], p[1]); ctx.stroke();
-      ctx.fillStyle = '#ffd24a'; diamond(p[0], p[1], (4 + Math.sin(time * 4)) * U);
+      ctx.fillStyle = `rgb(${col})`; diamond(p[0], p[1], (4 + Math.sin(time * 4)) * U);
     } else {
       const g = project(k.x, k.y, k.gz), gx = g[0], gy = g[1];
       const p = project(k.x, k.y, k.z + Math.sin(time * 3 + k.x) * 0.6);
@@ -281,6 +296,24 @@ function drawMarks(ctx, marks, time, scenery) {
       ctx.beginPath(); ctx.moveTo(gx, gy); ctx.lineTo(p[0], p[1]); ctx.stroke();
       ctx.fillStyle = '#ffe98a'; diamond(p[0], p[1], (3 + Math.sin(time * 6 + k.y) * 0.9) * U);
       ctx.fillStyle = '#ffffff'; ctx.fillRect(p[0] - U / 2, p[1] - U / 2, U, U);
+    }
+  }
+}
+
+// Short-lived effects: foam, ripples, spray, dust, sparks, smoke. `under` ones lie on the surface below the aircraft.
+function drawFx(ctx, fx, under) {
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  for (const f of fx) {
+    if (!!f.under !== under) continue;
+    const a = Math.max(0, 1 - f.age / f.life), p = project(f.x, f.y, f.z);
+    if (f.kind === 'ring') { // a ripple spreading on the water
+      const rad = f.size * (0.25 + f.age / f.life) * V.zoom;
+      ctx.strokeStyle = `rgba(255,255,255,${a * 0.6})`; ctx.lineWidth = U;
+      ctx.beginPath(); ctx.ellipse(p[0], p[1], rad, rad * V.tilt, 0, 0, 6.283); ctx.stroke();
+    } else {
+      const s = f.size * U * (1 + f.age * (f.grow || 0));
+      ctx.fillStyle = `rgba(${f.col},${a * (f.alpha || 1)})`;
+      ctx.fillRect(p[0] - s / 2, p[1] - s / 2, s, s);
     }
   }
 }
@@ -356,6 +389,7 @@ export function drawScene(ctx, scene) {
   for (const c of cloudList) if (!scene.showPlane || c.alt <= pl.alt) drawCloud(c, false);
   ctx.setTransform(1, 0, 0, 1, 0, 0);
 
+  if (scene.fx && scene.fx.length) drawFx(ctx, scene.fx, true);
   if (scene.marks && scene.marks.length) drawMarks(ctx, scene.marks, time, scenery);
   drawStreaks(ctx, pl, scene.speedFrac || 0);
   if (scene.showPlane) {
@@ -366,7 +400,14 @@ export function drawScene(ctx, scene) {
       ctx.fillStyle = `rgba(${pf.dark ? '40,40,46' : '255,180,80'},${Math.max(0, 0.6 - pf.age * 0.5)})`;
       ctx.fillRect(p[0] - s / 2, p[1] - s / 2, s, s);
     }
+    // the pilot, out of the aircraft: drawn behind or in front of it depending on where they stand
+    const who = scene.pilot;
+    const drawWho = () => { drawStack(ctx, scenery.pilot[who.pose], who.x, who.y, who.z + scenery.pilot[0].cz * 0.34, who.rot, 0.34); ctx.setTransform(1, 0, 0, 1, 0, 0); };
+    const inFront = who && (who.onTop || V.s * (who.x - pl.x) + V.c * (who.y - pl.y) > 0);
+    if (who && !inFront) drawWho();
     drawPlane(ctx, pl, model, time);
+    if (who && inFront) drawWho();
+    if (scene.fx && scene.fx.length) drawFx(ctx, scene.fx, false);
     for (const c of cloudList) if (c.alt > pl.alt) drawCloud(c, true);
   }
   ctx.setTransform(1, 0, 0, 1, 0, 0);

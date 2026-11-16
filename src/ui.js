@@ -1,6 +1,6 @@
 // DOM screens: the flight HUD, the in-flight repair mini-game, story cards and the hangar.
 
-import { surfText, WORLDS, AIRCRAFT, UPGRADES, PARTS, PART_KEYS, MISSIONS, INTRO, EPILOGUE, KIT_COST, KIT_CAP_COST, KIT_CAP_MAX, BIOMES } from './data.js';
+import { DOOR, ERA_FINDS, surfText, WORLDS, AIRCRAFT, UPGRADES, PARTS, PART_KEYS, MISSIONS, INTRO, EPILOGUE, KIT_COST, KIT_CAP_COST, KIT_CAP_MAX, BIOMES } from './data.js';
 import { canFly, calcStats, cruiseRange, repairCost, fuelCost, upCost, missionDist, targetOf, km, fmtAlt, jobPay } from './rules.js';
 
 const $ = (id) => document.getElementById(id);
@@ -246,7 +246,7 @@ export function planWarnings(G) {
 
 function mission(G) {
   const m = G.mission, A = AIRCRAFT[G.craft];
-  if (m.free) return `<div class="row"><div><div class="name">${m.title}</div><p>${EPILOGUE}</p></div></div>`;
+  if (m.free) return `<div class="row"><div><div class="name">${m.title}</div><p>${m.excursion ? m.brief : EPILOGUE}</p></div></div>`;
   const t = targetOf(m), d = missionDist(m), w = planWarnings(G);
   return `<div class="row"><div>
       <small class="chapter">${G.chapter}</small>
@@ -259,14 +259,32 @@ function mission(G) {
     ${w.length ? w.map(([c, x]) => `<p class="warnline ${c}">▲ ${x}</p>`).join('') : `<p class="okline">The ${A.name} is ready.</p>`}`;
 }
 
-const TABS = [['workshop', 'Workshop'], ['skills', 'Skills'], ['fleet', 'Fleet'], ['logbook', 'Logbook'], ['mission', 'Mission']];
-const BODY = { workshop, skills, fleet, logbook, mission };
+// The Ark's door: pick a dynasty you have been to in the story and go back for a look round.
+function door(G) {
+  const s = G.save, found = s.found || {};
+  const tally = (w) => `${ERA_FINDS[w].filter((f) => found[f.id]).length}/${ERA_FINDS[w].length} curiosities found`;
+  if (G.mission.excursion) {
+    return `<div class="row"><div><div class="name">${WORLDS[s.visit].name}</div><p>${tally(s.visit)}. The door stands open behind you, and there is a second one glowing in the sky nearby that you can fly through.</p></div>
+      <div class="acts"><button class="mini gold" data-act="doorhome">Step back through</button></div></div>
+      ${ERA_FINDS[s.visit].map((f) => `<div class="row"><div><div class="name">${found[f.id] ? f.title : '? ? ?'}</div><p>${found[f.id] ? f.text : 'Something worth seeing. Look for a blue beam.'}</p></div></div>`).join('')}`;
+  }
+  let h = '<p><small>The brass key turns in the Ark\u2019s door, and it opens on other years. Visits are for exploring: the story waits for you.</small></p>';
+  for (const [w, need] of DOOR) {
+    const open = s.mission > need;
+    h += `<div class="row"><div><div class="name">${open ? WORLDS[w].name : '? ? ?'}</div><p>${open ? tally(w) : 'The door has not opened here yet.'}</p></div>
+      <div class="acts"><button class="mini gold" data-act="door" data-arg="${w}" ${open ? '' : 'disabled'}>Open the door</button></div></div>`;
+  }
+  return h;
+}
+
+const TABS = [['workshop', 'Workshop'], ['skills', 'Skills'], ['fleet', 'Fleet'], ['logbook', 'Logbook'], ['door', 'Door'], ['mission', 'Mission']];
+const BODY = { workshop, skills, fleet, logbook, door, mission };
 
 export function hangarHTML(G) {
   const s = G.save, m = G.mission, w = WORLDS[m.world], stop = w.stops[m.from];
   return `<div class="hangar">
     <header><div><h2>${stop.name}</h2><small>${w.id === 'earth' ? stop.tag : w.name} · ${AIRCRAFT[G.craft].name}</small></div><div class="money">$${s.money}</div></header>
-    <div class="tabs">${TABS.map(([k, n]) => `<button data-act="tab" data-arg="${k}" class="${G.tab === k ? 'on' : ''}">${n}</button>`).join('')}</div>
+    <div class="tabs">${TABS.filter(([k]) => k !== 'door' || s.fleet.ark).map(([k, n]) => `<button data-act="tab" data-arg="${k}" class="${G.tab === k ? 'on' : ''}">${n}</button>`).join('')}</div>
     <section>${BODY[G.tab](G)}</section>
     <footer>${G.tab === 'mission'
       ? '<button class="btn primary" data-act="takeoff">Take off</button>'

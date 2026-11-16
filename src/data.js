@@ -421,3 +421,31 @@ export const TASKS = {
   11: { prop: 'rafts', type: 'land', water: true, t: 0.5, off: -150, pay: 260, label: 'Come down beside the timber rafts and take on teak', after: 'The raftsmen pole the logs alongside and roar with laughter at your paddle wheels.' },
   12: { type: 'high', alt: 175, pay: 300, label: 'Reach orbit: climb above 100 km', after: 'The engines fall quiet. You are falling round the world.' },
 };
+
+// The Ark's door. Each dynasty opens once the story has taken you there (the number is its mission).
+export const DOOR = [['han', 8], ['tang', 9], ['song', 10], ['ming', 11]];
+
+// Three things to find on a visit to each dynasty: fly low over the blue beam.
+// text is what you see; note separates the record from the story's invention.
+export const ERA_FINDS = {
+  han: [
+    { id: 'han_paper', title: 'The paper makers', text: 'A workshop by the stream is pulping bark, hemp and old fishing nets into sheets and drying them on racks. The court official Cai Lun reported this method to the emperor in 105. It will carry every book written for the next two thousand years.', note: 'In the history books: Cai Lun and papermaking, 105 CE. Imagined: one sheet on the rack has a careful drawing of a biplane.' },
+    { id: 'han_bellows', title: 'The water bellows', text: 'A waterwheel works a row of bellows that blow a furnace, with nobody on the treadles at all. The prefect Du Shi built engines like this in the year 31 so that iron farm tools could be cast cheaply.', note: 'In the history books: Du Shi’s water-powered bellows, 31 CE. Imagined: the two sisters who run this one, and their opinion of your rivets.' },
+    { id: 'han_road', title: 'The western road', text: 'A caravan of camels is coming in from the west with glass, horses and grape vines, more than two centuries after the envoy Zhang Qian first brought back news of the kingdoms beyond the desert.', note: 'In the history books: Zhang Qian’s journeys in the 2nd century BCE opened the routes later called the Silk Road. Imagined: the trader who swears he has seen your ship before, further west.' },
+  ],
+  tang: [
+    { id: 'tang_pagoda', title: 'The Wild Goose Pagoda', text: 'Storeys of brick rising over the monastery where the monk Xuanzang translated the scriptures he carried home from India. It was first raised in 652 and rebuilt taller in 704.', note: 'In the history books: the Giant Wild Goose Pagoda in Chang’an, 652 and 704. Imagined: the small wren scratched into a brick near the top.' },
+    { id: 'tang_polo', title: 'Polo on the palace ground', text: 'Riders in silk thunder after a ball no bigger than a fist. The game came east along the trade roads, the court is mad for it, and the women play as hard as the men.', note: 'In the history books: polo was a passion of the Tang court, and tomb figures show women players. Imagined: the rider who salutes the Ark with her mallet.' },
+    { id: 'tang_canal', title: 'The Grand Canal', text: 'Grain barges nose to tail as far as you can see, on a waterway dug a century ago to join the Yellow River to the Yangtze. It is what feeds a capital of a million people.', note: 'In the history books: the Grand Canal was completed under the Sui in 609 and carried the Tang grain supply. Imagined: nothing. It really was that big.' },
+  ],
+  song: [
+    { id: 'song_type', title: 'The printer’s shop', text: 'Bi Sheng’s trick, fifty years old now: each character is a little block of baked clay, set in an iron frame with wax, inked, pressed, and then broken up to be used again.', note: 'In the history books: Bi Sheng’s movable type, about 1040, described by Shen Kuo. Imagined: the handbill being set today, which advertises a flying ship.' },
+    { id: 'song_compass', title: 'The needle that points south', text: 'A scholar floats a magnetised needle in a bowl of water and notes that it does not point quite true south, but a little to the east of it. Shen Kuo wrote that down in 1088.', note: 'In the history books: Shen Kuo’s account of the magnetic needle and its declination, 1088. Imagined: his polite interest in your compass, and his list of what is wrong with it.' },
+    { id: 'song_bridge', title: 'The rainbow bridge', text: 'A timber arch with no piers leaps the river in a single span, so the grain boats can pass beneath with their masts lowered. Half the city seems to be standing on it, buying snacks.', note: 'In the history books: the rainbow bridge of Kaifeng, painted in the scroll Along the River During the Qingming Festival. Imagined: the snack seller who wants to know if the Ark is for hire.' },
+  ],
+  ming: [
+    { id: 'ming_wall', title: 'The longest wall', text: 'Nanjing’s city wall, finished a dozen years ago, runs for more than thirty kilometres. Each brick is stamped with the name of the man who made it, so that a bad one can be traced back to him.', note: 'In the history books: the Nanjing city wall, built 1366 to 1393, with inscribed bricks. Imagined: one brick stamped with a name you know.' },
+    { id: 'ming_book', title: 'The encyclopedia', text: 'Two thousand scholars are copying everything worth knowing into a single work for the Yongle emperor. When it is done it will fill more than eleven thousand volumes.', note: 'In the history books: the Yongle Encyclopedia, compiled 1403 to 1408. Imagined: the entry on flying machines, which a clerk lets you correct.' },
+    { id: 'ming_dock', title: 'The dry docks', text: 'Basins cut beside the river, long enough for the great ships that are said to carry nine masts. The hull is built on the dry floor, then the gate is opened and the Yangtze floats her out.', note: 'In the history books: the building basins of the Longjiang shipyard, some of which survive. The size of the largest ships is still argued over. Imagined: Aunt Ruan waving from the dock gate.' },
+  ],
+};
