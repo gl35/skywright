@@ -151,6 +151,13 @@ function drawPlane(ctx, pl, model, time) {
   const pose = model.fps && pl.propSpin > 0.05 ? Math.floor(pl.spin * beat * 0.05) % model.frames.length : 0;
   const m = model.frames[pose][idx + ROLL_STEPS];
   drawStack(ctx, m, pl.x, pl.y, pl.alt, pl.heading, model.vs, pl.lean || 0);
+  if (pl.shield) { // heat shield: a shimmering bubble
+    const q = project(pl.x, pl.y, pl.alt);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.strokeStyle = `rgba(140,240,255,${0.5 + 0.3 * Math.sin(time * 20)})`;
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.ellipse(q[0], q[1], model.nx * model.vs * V.zoom * 0.62, model.nx * model.vs * V.zoom * 0.45, 0, 0, 6.283); ctx.stroke();
+  }
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   const vs = model.vs, mx = (model.nx - 1) / 2, mz = (model.nz - 1) / 2;
   if (pl.propSpin > 0.02) {
@@ -168,7 +175,7 @@ function drawPlane(ctx, pl, model, time) {
   }
   if (pl.propSpin > 0.1) {
     for (const j of model.jets) {
-      const len = 1 + pl.throttle * pl.throttle * 13 + Math.sin(time * 60) * (0.5 + pl.throttle);
+      const len = (1 + pl.throttle * pl.throttle * 13) * (pl.boosting ? 2 : 1) + Math.sin(time * 60) * (0.5 + pl.throttle);
       for (let i = 0; i < len; i++) {
         const w = i < len * 0.5 ? 1 : 0;
         const p = planePoint(pl, (j.x - mx - 1 - i) * vs, j.y * vs, (j.z - mz) * vs);

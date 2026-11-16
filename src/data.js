@@ -202,6 +202,27 @@ export const AIRCRAFT = {
   },
 };
 
+// What makes each machine different.
+// ability: a move on a button, lasting `dur` seconds with `cd` seconds to recover.
+// surf: how it gets about once it is down. water: sails. land 'flat': taxis on level ground. land 'climb': walks over rough ground.
+const EXTRA = {
+  sparrow: { ability: { id: 'loop', name: 'LOOP', dur: 2.2, cd: 8, desc: 'A full loop, like a fairground wheel. Storms cannot touch you during it, and it shakes jammed controls free.' }, surf: { land: 'flat' } },
+  heron: { ability: { id: 'lean', name: 'LEAN', dur: 14, cd: 20, desc: 'Lean the mixture: burns a third of the fuel for a while.' }, surf: { water: true } },
+  dragonfly: { ability: { id: 'hover', name: 'HOVER', dur: 6, cd: 5, desc: 'Stops dead in the air and turns on the spot.' }, surf: { land: 'climb' } },
+  kestrel: { ability: { id: 'highclimb', name: 'CLIMB', dur: 7, cd: 18, desc: 'Both engines to the stops: climbs far faster and well above its normal ceiling.' }, surf: { land: 'flat' } },
+  comet: { ability: { id: 'burner', name: 'BURNER', dur: 5, cd: 15, desc: 'Afterburner: much faster, and three times the fuel.' }, surf: { land: 'flat' } },
+  meteor: { ability: { id: 'zoom', name: 'ZOOM', dur: 3, cd: 15, desc: 'Rocket zoom: straight up, very fast.' }, surf: { land: 'flat' } },
+  ark: { ability: { id: 'mend', name: 'MEND', dur: 9, cd: 25, desc: 'All stop. While she hangs still you walk the deck and patch the worst parts back to working order, no kit needed.' }, surf: { water: true, land: 'flat' } },
+  starling: { ability: { id: 'shield', name: 'SHIELD', dur: 8, cd: 20, desc: 'Heat shield: no re-entry heat and no storm damage while it holds.' }, surf: { land: 'flat' } },
+};
+for (const k of Object.keys(EXTRA)) Object.assign(AIRCRAFT[k], EXTRA[k]);
+export const surfText = (A) => {
+  const w = A.surf.water, l = A.surf.land, wheels = A.hover ? 'paddle wheels' : 'floats';
+  if (w && l) return `On the surface: sails on its ${wheels} and trundles over level ground.`;
+  if (w) return `On the surface: sails on its ${wheels}. Cannot move on land.`;
+  return l === 'climb' ? 'On the surface: walks on its legs, even over rough ground.' : 'On the surface: taxis on level ground.';
+};
+
 // Upgrades are your own skills and tools, so they carry over to every machine you fly.
 export const UPGRADES = {
   engine: { name: 'Engine tuning', desc: '+8% speed and climb per level' },

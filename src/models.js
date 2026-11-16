@@ -201,6 +201,10 @@ function ark() {
   v.box(14, cy, 4, 14, cy, 5.5, DARK); // stove pipe
   for (const x of [11, 13.5, 16, 18.5, 21]) for (const s of [-1, 1]) v.box(x, cy + s * 2, 4, x, cy + s * 3, 6.5, ROPE); // rigging
   for (const y of [cy - 5, cy + 5]) { v.box(13, Math.min(y, cy), 2, 13, Math.max(y, cy), 2, DARK); v.tube(12, 15, y, 2, () => 0.9, BRASS); }
+  for (const y of [cy - 3.2, cy + 3.2]) { // paddle wheels, one each side of the hull
+    for (let a = 0; a < 6.283; a += 0.2) v.set(16.5 + Math.cos(a) * 2.4, y, 2.2 + Math.sin(a) * 2.4, 0xb5332a);
+    for (let a = 0; a < 3.14; a += 0.785) for (let r = -2; r <= 2; r += 0.5) v.set(16.5 + Math.cos(a) * r, y, 2.2 + Math.sin(a) * r, 0xd9a05a);
+  }
   finish(v, { panels: false, lights: false });
   // stitched seams between the patches, a rope net over the top, and lanterns fore and aft
   v.each((x, y, z, c) => {

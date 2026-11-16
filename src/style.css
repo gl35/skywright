@@ -104,3 +104,11 @@ button { font: inherit; color: inherit; cursor: pointer; }
 #musicBtn { position: fixed; top: calc(10px + env(safe-area-inset-top)); left: calc(10px + env(safe-area-inset-left)); width: 36px; height: 36px;
   background: rgba(16, 24, 44, 0.72); border: 2px solid #f4f1e6; font-size: 18px; line-height: 1; z-index: 5; }
 #musicBtn.off { opacity: 0.45; text-decoration: line-through; }
+
+#abilBtn, #stopBtn { position: absolute; right: calc(68px + env(safe-area-inset-right)); height: 40px; min-width: 84px; padding: 0 8px;
+  background: rgba(16, 24, 44, 0.8); border: 2px solid #ffd24a; color: #ffd24a; font-size: 12px; font-weight: 700; }
+#abilBtn { bottom: calc(100px + env(safe-area-inset-bottom)); }
+#stopBtn { bottom: calc(148px + env(safe-area-inset-bottom)); border-color: #f4f1e6; color: #f4f1e6; }
+#abilBtn.on { background: #ffd24a; color: #10182c; }
+#abilBtn.cool { opacity: 0.5; border-color: #f4f1e6; color: #f4f1e6; }
+.row .abil { color: #ffd24a; }

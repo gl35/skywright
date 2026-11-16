@@ -1,12 +1,12 @@
 // DOM screens: the flight HUD, the in-flight repair mini-game, story cards and the hangar.
 
-import { WORLDS, AIRCRAFT, UPGRADES, PARTS, PART_KEYS, MISSIONS, INTRO, EPILOGUE, KIT_COST, KIT_CAP_COST, KIT_CAP_MAX, BIOMES } from './data.js';
+import { surfText, WORLDS, AIRCRAFT, UPGRADES, PARTS, PART_KEYS, MISSIONS, INTRO, EPILOGUE, KIT_COST, KIT_CAP_COST, KIT_CAP_MAX, BIOMES } from './data.js';
 import { calcStats, cruiseRange, repairCost, fuelCost, upCost, missionDist, targetOf, km, fmtAlt, jobPay } from './rules.js';
 
 const $ = (id) => document.getElementById(id);
 export const el = {};
 for (const id of ['hud', 'nav', 'navArrow', 'navText', 'alert', 'hint', 'gSpd', 'gAlt', 'gFuel', 'pips', 'throttle', 'thrFill',
-  'viewBtn', 'fixBtn', 'fixPanel', 'fixTitle', 'fixZone', 'fixMark', 'fixDots', 'fixHit', 'panel', 'flash']) el[id] = $(id);
+  'viewBtn', 'abilBtn', 'stopBtn', 'fixBtn', 'fixPanel', 'fixTitle', 'fixZone', 'fixMark', 'fixDots', 'fixHit', 'panel', 'flash']) el[id] = $(id);
 
 const condCls = (v) => (v > 60 ? 'ok' : v > 35 ? 'warn' : 'bad');
 const bar = (pct, cls = '') => `<div class="bar ${cls}"><i style="width:${Math.max(0, Math.min(100, pct))}%"></i></div>`;
@@ -185,6 +185,8 @@ function fleet(G) {
       <div class="acts"><button class="mini" disabled>${id === G.mission.craft ? 'Flying now' : `${Math.round(worst)}% worst part`}</button></div>
       <div>
         <p>${A.blurb}</p>
+        <p class="abil"><b>${A.ability.name}:</b> ${A.ability.desc}</p>
+        <p>${surfText(A)}</p>
         <div class="stats"><span>${Math.round(st.speed * (1 + st.space) * 10)} kt</span><span>${fmtAlt(st.ceil)}</span><span>${km(cruiseRange(st, st.tank))} km</span></div>
       </div>
     </div>`;
@@ -231,6 +233,8 @@ function mission(G) {
       <div class="name">${m.title}</div>
       <p>${m.brief}</p>
       <p><b>Fly:</b> ${A.name} (${A.kind.toLowerCase()}). <b>To:</b> ${t.stop.name}${t.world !== m.world ? `, ${WORLDS[t.world].name}` : ''}${d ? `, ${km(d)} km` : ''}.${m.pay ? ` <b>Pays:</b> $${m.pay}.` : ''}</p>
+      <p class="abil"><b>${A.ability.name}:</b> ${A.ability.desc}</p>
+      <p>${surfText(A)}</p>
     </div></div>
     ${w.length ? w.map(([c, x]) => `<p class="warnline ${c}">▲ ${x}</p>`).join('') : `<p class="okline">The ${A.name} is ready.</p>`}`;
 }
@@ -269,7 +273,8 @@ export function fieldHTML(G, onWater) {
   h += `<div class="row"><div class="name">Fuel</div><div class="meter">${bar((ac.fuel / G.stats.tank) * 100)}<span>${Math.round(ac.fuel)}</span></div></div>
     ${ac.fuel < 1 ? '<p class="warnline bad">▲ The tank is dry. You will have to call for help.</p>' : ''}
     </section>
-    <footer>${ac.fuel < 1 ? '<button class="btn" data-act="tow">Call for help</button>' : '<button class="btn primary" data-act="takeoff">Take off</button>'}</footer>
+    <footer>${ac.fuel < 1 ? '<button class="btn" data-act="tow">Call for help</button>' : '<button class="btn primary" data-act="takeoff">Take off</button>'}
+      ${G.surfLabel && ac.fuel >= 1 ? `<button class="btn ghost" data-act="surface">${G.surfLabel}</button>` : ''}</footer>
   </div>`;
   return h;
 }

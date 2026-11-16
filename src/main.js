@@ -40,6 +40,7 @@ const G = {
   puffs: [], inCell: false, underCell: false,
   tab: 'workshop', legTime: 0, timer: 0, landing: null, onWater: false,
   transited: false, burnT: 0,
+  abil: { t: 0, cd: 0 }, surfLabel: '',
   cards: [], afterCards: null,
   view: 0, sky: 0, heat: 0,
   camRot: -Math.PI / 2, zoom: 3 * ZK, ax: 0.5, ay: 0.7, trailT: 0, puffT: 0, hudT: 0, hintT: 0,
@@ -115,6 +116,7 @@ function openHangar() {
 function enterHangar() {
   setup(); park();
   for (const k of PART_KEYS) G.fail[k] = false;
+  G.abil.t = G.abil.cd = 0; G.plane.boosting = G.plane.shield = false;
   G.puffs.length = 0; G.inCell = G.underCell = false; G.heat = 0;
   ui.closeFix(); ui.setAlert(null); ui.setHint(null);
   ui.el.hud.classList.add('hidden');
@@ -183,6 +185,11 @@ const actions = {
   },
   fieldbodge(k) { G.fail[k] = false; G.ac.cond[k] = Math.max(G.ac.cond[k], 8); },
   tow() { towBack('tow'); },
+  surface() { // carry on along the ground or the water instead of taking off
+    G.mode = 'surface';
+    ui.hidePanel();
+    ui.el.hud.classList.remove('hidden');
+  },
   takeoff() {
     if (G.ac.fuel < 1) { beep(160, 0.25); G.tab = 'mission'; return; }
     initAudio();
@@ -204,7 +211,7 @@ const actions = {
       G.hintT = 10;
       ui.setHint(isTouch
         ? 'Drag left or right to steer.<br>Drag up to climb, down to descend.<br>The slider on the right is the throttle.<br>VIEW changes the camera.<br><br>Drag up to take off. Follow the arrow to the<br>next field and descend onto the runway to land.'
-        : 'A / D or arrows: steer<br>W / S: climb and descend<br>Q / E: throttle &nbsp; Space: fix a breakdown<br>V: change view &nbsp; N: music<br><br>Pull up to take off. Follow the arrow to the<br>next field and descend onto the runway to land.');
+        : 'A / D or arrows: steer<br>W / S: climb and descend<br>Q / E: throttle &nbsp; Space: fix a breakdown<br>V: change view &nbsp; N: music &nbsp; X: special move<br><br>Pull up to take off. Follow the arrow to the<br>next field and descend onto the runway to land.');
     }
   },
 };
@@ -306,6 +313,9 @@ function doTransit() {
 function updateFlight(dt) {
   const p = G.plane, st = G.stats, ac = G.ac, f = G.fail, c = ac.cond, m = G.mission, grav = world().gravity;
   G.legTime += dt;
+  G.abil.t = Math.max(0, G.abil.t - dt); G.abil.cd = Math.max(0, G.abil.cd - dt);
+  const abil = AIRCRAFT[m.craft].ability, ab = G.abil.t > 0 ? abil.id : null; // the special move in progress, if any
+  p.boosting = ab === 'burner' || ab === 'zoom'; p.shield = ab === 'shield';
   checkStorms();
   p.throttle = input.throttle;
   const dead = ac.fuel <= 0 || c.engine <= 0;
@@ -314,7 +324,10 @@ function updateFlight(dt) {
   const orbiting = st.orbit && p.alt > 170;
   let base = st.hover ? (dead ? 0.1 : power) : dead ? 0.35 : 0.25 + 0.75 * power;
   if (orbiting) base = Math.max(base, 0.9); // nothing to slow you down up here
-  p.speed += (st.speed * base * boost - p.speed) * Math.min(1, dt * 0.7);
+  const still = ab === 'hover' || ab === 'mend';
+  if (still) base = 0;
+  const abSpeed = ab === 'burner' ? 1.7 : ab === 'zoom' ? 1.3 : 1;
+  p.speed += (st.speed * base * boost * abSpeed - p.speed) * Math.min(1, dt * (still ? 2.5 : 0.7));
   p.propSpin = dead ? Math.max(0, p.propSpin - dt * 0.5) : 1;
 
   p.stick += (input.turn - p.stick) * Math.min(1, dt * 6); // ease the stick so taps are gentle
@@ -328,18 +341,23 @@ function updateFlight(dt) {
   let vzT;
   if (dead) vzT = (st.hover ? -0.8 : -1.6) + Math.min(0, input.pitch) * st.climb + Math.max(0, input.pitch) * 0.7;
   else vzT = input.pitch > 0 ? input.pitch * st.climb * (0.3 + 0.7 * power) : input.pitch * st.climb * 0.9;
+  if (ab === 'highclimb' && vzT > 0) vzT *= 2.5;
+  if (ab === 'zoom') vzT = 30;
+  const loopAt = ab === 'loop' ? 1 - G.abil.t / abil.dur : -1; // 0..1 round the loop
+  if (loopAt >= 0) { vzT = 16 * Math.cos(Math.PI * loopAt); p.vz = vzT; } // up over the top and back down to where you started
   if (vzT < 0) vzT *= 0.45 + 0.55 * grav; // things fall slowly in low gravity
-  if (vzT > 0 && p.alt > st.ceil - 3) vzT *= clamp((st.ceil - p.alt) / 3, 0, 1);
+  const ceil = st.ceil + (ab === 'highclimb' ? 15 : 0);
+  if (vzT > 0 && p.alt > ceil - 3 && loopAt < 0) vzT *= clamp((ceil - p.alt) / 3, 0, 1);
   if (G.inCell) vzT += Math.sin(G.time * 5.1) * 3;
   const agl = p.alt - (levelAt(p.x, p.y) * HZ + G.belly);
   if (agl < 3 && vzT < -(0.8 + agl)) vzT = -(0.8 + agl); // flare: ease the sink rate close to the ground
   p.vz += (vzT - p.vz) * Math.min(1, dt * 3);
   p.alt += p.vz * dt;
-  p.lean = lerp(p.lean, clamp(p.vz / st.climb, -1, 1) * 0.8, Math.min(1, dt * 4));
+  p.lean = loopAt >= 0 ? Math.sin(2 * Math.PI * loopAt) * 2.4 : lerp(p.lean, clamp(p.vz / st.climb, -1, 1) * 0.8, Math.min(1, dt * 4));
   p.x += Math.cos(p.heading) * p.speed * dt;
   p.y += Math.sin(p.heading) * p.speed * dt;
 
-  if (!dead) ac.fuel = Math.max(0, ac.fuel - st.burn * (0.25 + 0.75 * p.throttle * p.throttle) * (f.fuel ? 4 : 1) * (orbiting ? 0.1 : 1) * dt);
+  if (!dead) ac.fuel = Math.max(0, ac.fuel - st.burn * (0.25 + 0.75 * p.throttle * p.throttle) * (f.fuel ? 4 : 1) * (orbiting ? 0.1 : 1) * (ab === 'lean' ? 0.33 : ab === 'burner' ? 3 : ab === 'zoom' ? 2 : 1) * dt);
 
   // wear and tear
   const w = st.wear * dt;
@@ -348,9 +366,11 @@ function updateFlight(dt) {
   G.heat = 0;
   if (st.space && thin > 0.15 && p.vz < 0) { // re-entry: the steeper the descent, the hotter the hull
     G.heat = clamp(thin * (-p.vz / (st.climb * 0.9 * (0.45 + 0.55 * grav)) - 0.45) * 2.2, 0, 1);
+    if (ab === 'shield') G.heat = 0;
     c.frame -= 7 * G.heat * dt;
   }
-  if (G.inCell) {
+  if (ab === 'mend') for (const k of PART_KEYS) if (c[k] < 45) c[k] = Math.min(45, c[k] + 2.5 * dt);
+  if (G.inCell && ab !== 'shield' && ab !== 'loop') {
     c.frame -= 3.2 * dt; c.avionics -= 1.6 * dt;
     if (Math.random() < 0.18 * dt) { c.avionics -= 10; ui.flash(); thud(0.6, 0.9); }
   }
@@ -443,14 +463,50 @@ function completeMission() {
   showCards(cards, enterHangar);
 }
 
+// Stopped somewhere that is not a landing ground: open the camp screen (repairs from kits, take off, or move on).
+function makeCamp(onWater) {
+  const A = AIRCRAFT[G.mission.craft], lvl = levelAt(G.plane.x, G.plane.y);
+  const wet = lvl === 0 && world().water;
+  G.mode = 'field'; G.onWater = onWater || wet;
+  G.plane.propSpin = 0; G.plane.speed = 0;
+  G.surfLabel = wet ? (A.surf.water ? 'Sail on' : '') : A.surf.land === 'climb' ? 'Walk on' : A.surf.land ? 'Taxi on' : '';
+  ui.el.hud.classList.add('hidden');
+  ui.setAlert(null);
+  refresh();
+}
+
+// Sailing, walking or taxiing. Slow, but it gets you to a better place to take off from, or all the way there.
+function updateSurface(dt) {
+  const p = G.plane, st = G.stats, A = AIRCRAFT[G.mission.craft], w = world();
+  p.throttle = input.throttle;
+  p.propSpin = p.throttle > 0.05 ? 1 : 0.15;
+  const here = levelAt(p.x, p.y), wetHere = here === 0 && w.water;
+  p.speed += (st.speed * (wetHere ? 0.36 : 0.24) * p.throttle - p.speed) * Math.min(1, dt * 1.5);
+  p.stick += (input.turn - p.stick) * Math.min(1, dt * 6);
+  p.heading += p.stick * 1.5 * dt;
+  p.roll = lerp(p.roll, 0, Math.min(1, dt * 5)); p.lean = lerp(p.lean, 0, Math.min(1, dt * 5)); p.vz = 0;
+  const nx = p.x + Math.cos(p.heading) * p.speed * dt, ny = p.y + Math.sin(p.heading) * p.speed * dt;
+  const to = levelAt(nx, ny), wetTo = to === 0 && w.water;
+  let ok;
+  if (wetTo) ok = !!A.surf.water;
+  else if (!A.surf.land) ok = false;
+  else ok = A.surf.land === 'climb' ? Math.abs(to - here) <= 1 && to <= 7 : to === here || (wetHere && to === 1) || (here === 1 && to === 2) || (here === 2 && to === 1);
+  let blocked = false;
+  if (ok) { p.x = nx; p.y = ny; } else { blocked = p.speed > 0.5; p.speed = 0; }
+  p.alt = lerp(p.alt, levelAt(p.x, p.y) * HZ + G.belly + (wetHere ? Math.sin(G.time * 2) * 0.15 : 0), Math.min(1, dt * 6));
+  G.ac.fuel = Math.max(0, G.ac.fuel - st.burn * 0.12 * p.throttle * dt);
+
+  const af = airfieldAt(p.x, p.y), t = G.target;
+  const atGoal = af >= 0 && !G.mission.free && w.id === t.world && af === t.index && (!G.mission.transit || G.transited);
+  if (atGoal && p.speed < 0.6 && p.throttle < 0.12) { G.landing = { res: 'airfield', af, hard: false }; resolveLanding(); return; }
+  if (G.ac.fuel <= 0) { makeCamp(wetHere); return; }
+  if (input.pitch > 0.3) { G.takeoffFrom = { x: p.x, y: p.y }; G.mode = 'takeoff'; return; } // pull up: start a take-off run from here
+  ui.setAlert(blocked ? 'She cannot go that way' : atGoal ? 'You have arrived. Close the throttle to stop here' : `${wetHere ? 'Sailing' : A.surf.land === 'climb' ? 'Walking' : 'Taxiing'}. Pull up to take off, STOP to make camp`, true);
+}
+
 function resolveLanding() {
   const { res, af } = G.landing, m = G.mission, t = G.target, here = world().id;
-  const fieldStop = () => {
-    G.mode = 'field'; G.onWater = res === 'water';
-    G.plane.propSpin = 0;
-    ui.el.hud.classList.add('hidden');
-    refresh();
-  };
+  const fieldStop = () => makeCamp(res === 'water');
   if (res === 'airfield') {
     if (!m.free && here === t.world && af === t.index && (!m.transit || G.transited)) completeMission();
     else if (here === m.world && af === m.from) enterHangar();
@@ -508,6 +564,7 @@ function tick(dt) {
   if (G.mode === 'title') updateDemo(dt);
   else if (G.mode === 'takeoff') updateTakeoff(dt);
   else if (G.mode === 'flying') updateFlight(dt);
+  else if (G.mode === 'surface') updateSurface(dt);
   else if (G.mode === 'rollout') updateRollout(dt);
   else if (G.mode === 'down') { G.timer += dt; p.propSpin = 0; if (G.timer > 1.7) resolveLanding(); }
   ui.updateFix(dt);
@@ -521,7 +578,7 @@ function frame(now) {
   tick(dt);
   const p = G.plane;
 
-  const inFlight = G.mode === 'takeoff' || G.mode === 'flying' || G.mode === 'rollout' || G.mode === 'down';
+  const inFlight = G.mode === 'takeoff' || G.mode === 'flying' || G.mode === 'rollout' || G.mode === 'down' || G.mode === 'surface';
   const airborne = G.mode === 'title' || G.mode === 'flying';
   updateEffects(dt, airborne);
 
@@ -588,6 +645,11 @@ function frame(now) {
       const d = destStop();
       if (d) ui.updateHud(G, screenBearing(p.x, p.y, d.x, d.y), `${d.name}  ${km(Math.hypot(d.x - p.x, d.y - p.y))} km`, input.throttle);
       else ui.updateHud(G, null, 'Climb to the black sky', input.throttle);
+      const ab = AIRCRAFT[G.mission.craft].ability, B = ui.el.abilBtn;
+      B.classList.toggle('hidden', G.mode !== 'flying');
+      B.classList.toggle('on', G.abil.t > 0); B.classList.toggle('cool', G.abil.t <= 0 && G.abil.cd > 0);
+      B.textContent = G.abil.t > 0 ? ab.name : G.abil.cd > 0 ? `${ab.name} ${Math.ceil(G.abil.cd)}` : ab.name;
+      ui.el.stopBtn.classList.toggle('hidden', G.mode !== 'surface');
     }
     if (G.hintT > 0) { G.hintT -= dt; if (G.hintT <= 0) ui.setHint(null); }
   }
@@ -602,6 +664,17 @@ function frame(now) {
 
   requestAnimationFrame(frame);
 }
+
+// The machine's special move.
+function useAbility() {
+  if (G.mode !== 'flying' || G.abil.t > 0 || G.abil.cd > 0) return;
+  const ab = AIRCRAFT[G.mission.craft].ability;
+  G.abil.t = ab.dur; G.abil.cd = ab.dur + ab.cd;
+  if (ab.id === 'loop') G.fail.frame = false; // the loop shakes jammed controls free
+  beep(500, 0.08); setTimeout(() => beep(760, 0.12), 80);
+}
+ui.el.abilBtn.addEventListener('click', useAbility);
+ui.el.stopBtn.addEventListener('click', () => { if (G.mode === 'surface') makeCamp(false); });
 
 function nextView() {
   G.view = (G.view + 1) % VIEWS.length;
@@ -622,7 +695,7 @@ window.addEventListener('resize', onResize);
 onResize();
 initInput(canvas, ui.el.throttle, {
   action: tryFix,
-  key: (code) => { if (code === 'KeyM') toggleMute(); if (code === 'KeyN') musicBtn.click(); if (code === 'KeyF') tryFix(); if (code === 'KeyV') nextView(); },
+  key: (code) => { if (code === 'KeyM') toggleMute(); if (code === 'KeyN') musicBtn.click(); if (code === 'KeyX') useAbility(); if (code === 'KeyF') tryFix(); if (code === 'KeyV') nextView(); },
 });
 G.model = aircraftModel('sparrow');
 G.belly = (G.model.nz * G.model.vs) / 2;
