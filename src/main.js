@@ -181,6 +181,7 @@ const actions = {
     G.ac.cond[k] = Math.min(100, G.ac.cond[k] + 30);
     G.fail[k] = false;
   },
+  fieldbodge(k) { G.fail[k] = false; G.ac.cond[k] = Math.max(G.ac.cond[k], 8); },
   tow() { towBack('tow'); },
   takeoff() {
     if (G.ac.fuel < 1) { beep(160, 0.25); G.tab = 'mission'; return; }
@@ -223,8 +224,8 @@ function tryFix() {
     else if (r === 'hit') beep(700, 0.06);
     else {
       G.fail[k] = false;
-      G.ac.cond[k] = Math.min(100, G.ac.cond[k] + 12);
-      G.save.kits--;
+      if (ui.fix.jury) G.ac.cond[k] = Math.max(G.ac.cond[k], 8); // a bodge: working again, barely
+      else { G.ac.cond[k] = Math.min(100, G.ac.cond[k] + 12); G.save.kits--; }
       ui.closeFix();
       beep(880, 0.1); setTimeout(() => beep(1180, 0.14), 90);
     }
@@ -232,8 +233,7 @@ function tryFix() {
   }
   const k = PART_KEYS.find((p) => G.fail[p]);
   if (!k) return;
-  if (G.save.kits < 1) { beep(150, 0.2, 'sawtooth'); return; }
-  ui.openFix(k, G.ac.cond[k]);
+  ui.openFix(k, G.ac.cond[k], G.save.kits < 1); // with no kits you can still bodge it, the hard way
 }
 ui.el.fixBtn.addEventListener('click', tryFix);
 ui.el.fixHit.addEventListener('pointerdown', (e) => { e.preventDefault(); tryFix(); });
@@ -361,7 +361,7 @@ function updateFlight(dt) {
   const ahead = levelAt(p.x + Math.cos(p.heading) * p.speed * 1.6, p.y + Math.sin(p.heading) * p.speed * 1.6) * HZ + G.belly;
   const nearField = airfieldAt(p.x, p.y) >= 0 || dist < 60;
   const wet = world().water;
-  if (failed) ui.setAlert(`${PARTS[failed].fail} · ${PARTS[failed].effect}${G.save.kits > 0 ? '' : ' · NO KITS LEFT'}`);
+  if (failed) ui.setAlert(`${PARTS[failed].fail} · ${PARTS[failed].effect}${G.save.kits > 0 ? ' · PRESS FIX' : ' · NO KITS: BODGE IT'}`);
   else if (dead) ui.setAlert(ac.fuel <= 0 ? 'OUT OF FUEL · GLIDING' : 'ENGINE DEAD · GLIDING');
   else if (G.heat > 0.15) ui.setAlert('RE-ENTRY HEAT · SHALLOW YOUR DESCENT');
   else if (ahead > p.alt - 0.5 && ahead > floor + 1) ui.setAlert('TERRAIN AHEAD · CLIMB OR TURN');

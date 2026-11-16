@@ -52,21 +52,25 @@ export function updateHud(G, bearing, navText, throttle) {
   if (h !== el.pips._h) { el.pips.innerHTML = h; el.pips._h = h; }
   const anyFail = PART_KEYS.some((k) => G.fail[k]);
   el.fixBtn.classList.toggle('hidden', !anyFail || fix.open);
+  el.fixBtn.textContent = G.save.kits > 0 ? 'FIX' : 'BODGE';
 }
 
 // ---------- in-flight repair: stop the marker in the green three times ----------
 export const fix = { open: false, part: null, pos: 0, dir: 1, speed: 1, z0: 0, z1: 0, hits: 0, need: 3 };
 function newZone(cond) {
-  const w = 0.13 + (cond / 100) * 0.12;
+  const w = (0.13 + (cond / 100) * 0.12) * (fix.jury ? 0.8 : 1);
   fix.z0 = 0.08 + Math.random() * (0.84 - w);
   fix.z1 = fix.z0 + w;
   el.fixZone.style.left = fix.z0 * 100 + '%';
   el.fixZone.style.width = w * 100 + '%';
 }
 function fixDots() { el.fixDots.textContent = '●'.repeat(fix.hits) + '○'.repeat(fix.need - fix.hits); }
-export function openFix(part, cond) {
-  Object.assign(fix, { open: true, part, pos: 0, dir: 1, speed: 1.05, hits: 0, cond });
-  el.fixTitle.textContent = `${PARTS[part].fail}: stop the marker in the green`;
+// jury: no kit to hand, so it is a harder bodge (five hits, smaller target) that gets the part working but no healthier.
+export function openFix(part, cond, jury = false) {
+  Object.assign(fix, { open: true, part, pos: 0, dir: 1, speed: 1.05, hits: 0, cond, jury, need: jury ? 5 : 3 });
+  el.fixTitle.textContent = jury
+    ? `${PARTS[part].fail}: no kits, so bodge it. Five clean hits`
+    : `${PARTS[part].fail}: stop the marker in the green`;
   newZone(cond); fixDots();
   el.fixPanel.classList.remove('hidden');
 }
@@ -256,7 +260,9 @@ export function fieldHTML(G, onWater) {
     const v = ac.cond[k];
     h += `<div class="row">
       <div class="name">${PARTS[k].name}${G.fail[k] ? ' · BROKEN' : ''}</div>
-      <div class="acts"><button class="mini gold" data-act="fieldfix" data-arg="${k}" ${s.kits < 1 || (v > 95 && !G.fail[k]) ? 'disabled' : ''}>Use kit +30</button></div>
+      <div class="acts">${s.kits < 1 && G.fail[k]
+        ? `<button class="mini" data-act="fieldbodge" data-arg="${k}">Bodge it</button>`
+        : `<button class="mini gold" data-act="fieldfix" data-arg="${k}" ${s.kits < 1 || (v > 95 && !G.fail[k]) ? 'disabled' : ''}>Use kit +30</button>`}</div>
       <div class="meter">${bar(v, condCls(v))}<span>${Math.round(v)}%</span></div>
     </div>`;
   }

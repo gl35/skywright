@@ -215,7 +215,7 @@ export const KIT_CAP_MAX = 5;
 export const START_SAVE = () => ({
   v: 2, mission: 0, money: 140,
   fleet: {}, up: { engine: 0, tank: 0, frame: 0, avionics: 0 },
-  kits: 1, kitCap: 2, shift: false, seen: {},
+  kits: 2, kitCap: 3, shift: false, seen: {},
 });
 
 export const INTRO = {
