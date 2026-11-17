@@ -138,5 +138,5 @@ export function bake(vox, { light = true } = {}) {
       }
   actx.putImageData(img, 0, 0);
   sctx.putImageData(simg, 0, 0);
-  return { atlas, sil, nx, ny, nz, cz: (nz - 1) / 2 };
+  return { atlas, sil, nx, ny, nz, cz: (nz - 1) / 2, vox }; // vox: the cells themselves, for the 3D renderer
 }

@@ -73,9 +73,44 @@ function terrain(x, y, stops) {
     const dx = x - ships[i].x, dy = y - ships[i].y, d2 = dx * dx + dy * dy;
     if (d2 > 18490000) continue;
     v = lerp(v, Math.min(v, -0.09), smoothstep(4300, 3900, Math.sqrt(d2))); // nothing but sea for a long way round
-    if (onDeck(dx, dy)) v = 1.5 / outHs; // the flight deck, at the height of any other landing ground
+    if (!noDeck && onDeck(dx, dy)) v = 1.5 / outHs; // the flight deck, at the height of any other landing ground
   }
   outV = v;
+}
+let noDeck = false;
+const sstep = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+// What the 3D renderer needs to know about one point of ground: its height as drawn, its colour (0..1), and whether a wood grows there.
+// The drawn height follows the game's stepped levels (a level is flat for the lower half of its band, then ramps to the next),
+// so what you see is what you land on. A carrier's deck is left out: the ship is a model, not ground.
+export function ground(x, y, out) {
+  noDeck = true; terrain(x, y, cur.stops); noDeck = false;
+  const v = outV, hs = outHs, A = mA.pal, B = mB.pal, t = mT;
+  let r, g, b;
+  out.wood = false;
+  if (v > 0) {
+    const lf = Math.min(NL - 1.001, 1 + v * hs), L = Math.floor(lf), k = sstep(0.5, 1, lf - L), U = Math.min(NL - 1, L + 1);
+    out.h = (L + k) * HZ * sstep(0, 0.4, v * hs);
+    out.lf = lf;
+    const a0 = A.land[L], a1 = A.land[U], b0 = B.land[L], b1 = B.land[U];
+    r = lerp(lerp(a0[0], a1[0], k), lerp(b0[0], b1[0], k), t); g = lerp(lerp(a0[1], a1[1], k), lerp(b0[1], b1[1], k), t); b = lerp(lerp(a0[2], a1[2], k), lerp(b0[2], b1[2], k), t);
+    let f = 0.9 + 0.2 * vnoise(x / 11, y / 11, cur.seed + 5);
+    if ((t < 0.5 ? mA : mB).trees && lf >= 3 && lf < 6 && vnoise(x / 8 + 3.3, y / 8 - 8.1, cur.seed + 11) > 0.5) { out.wood = true; f *= 0.72; }
+    r *= f; g *= f; b *= f;
+  } else {
+    out.lf = 0;
+    const d = Math.min(1, -v / 0.07);
+    if (cur.water) { // the sea bed, seen through the water
+      out.h = Math.max(-7, v * hs * 1.7);
+      const a0 = A.water[3], a1 = A.water[1], b0 = B.water[3], b1 = B.water[1];
+      r = lerp(lerp(a0[0], a1[0], d), lerp(b0[0], b1[0], d), t); g = lerp(lerp(a0[1], a1[1], d), lerp(b0[1], b1[1], d), t); b = lerp(lerp(a0[2], a1[2], d), lerp(b0[2], b1[2], d), t);
+    } else { // a dry basin
+      out.h = 0;
+      const a0 = A.water[2], a1 = A.water[0], b0 = B.water[2], b1 = B.water[0], f = 0.92 + 0.16 * vnoise(x / 5, y / 5, cur.seed + 3);
+      r = lerp(lerp(a0[0], a1[0], d), lerp(b0[0], b1[0], d), t) * f; g = lerp(lerp(a0[1], a1[1], d), lerp(b0[1], b1[1], d), t) * f; b = lerp(lerp(a0[2], a1[2], d), lerp(b0[2], b1[2], d), t) * f;
+    }
+  }
+  out.r = r / 255; out.g = g / 255; out.b = b / 255;
+  return out;
 }
 const toLevel = (v, hs) => (v > 0 ? Math.min(NL - 1, 1 + Math.floor(v * hs)) : 0);
 

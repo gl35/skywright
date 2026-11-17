@@ -4,7 +4,7 @@ import './style.css';
 import { ERA_FINDS, TASKS, WORLDS, AIRCRAFT, PARTS, PART_KEYS, MISSIONS, INTRO, START_SAVE, KIT_COST, KIT_CAP_COST, KIT_CAP_MAX } from './data.js';
 import { canFly, calcStats, repairCost, fuelCost, upCost, missionOf, targetOf, thinAir, km, jobPay } from './rules.js';
 import { aircraftModel, buildScenery } from './models.js';
-import { V, resizeView, watchSpeed, setCamera, drawScene, screenBearing, cloudsNow, project } from './render.js';
+import { V, resizeView, watchSpeed, setCamera, drawScene, screenBearing, cloudsNow, project } from './render3d.js';
 import { HZ, levelAt, airfieldAt, setWorld, world } from './world.js';
 import { input, initInput, pollInput, settings, toggleStick } from './input.js';
 import { makeQuestion } from './quiz.js';
@@ -14,7 +14,7 @@ import { clamp, lerp } from './noise.js';
 import { drawCockpit } from './cockpit.js';
 
 const canvas = document.getElementById('game');
-const ctx = canvas.getContext('2d', { alpha: false });
+const ctx = canvas.getContext('2d'); // a clear overlay: the world itself is drawn in 3D underneath
 const SAVE_KEY = 'skywright.save.v2';
 const isTouch = window.matchMedia('(pointer: coarse)').matches;
 const ZK = 1.9; // overall zoom: how many screen pixels one world cell covers
@@ -1059,7 +1059,8 @@ function frame(now, once) {
   const shake = (G.mode === 'flying' && p.throttle > 0.85 ? (p.throttle - 0.85) * 5 : 0) + G.shakeT * 22 * V.q; // engine buzz, and the jolt of a hard arrival // the airframe buzzes at full power
   const fx = onFoot && who ? who.x : p.x, fy = onFoot && who ? who.y : p.y, fz = onFoot && who ? who.z + vw.eye : p.alt;
   setCamera(fx, fy, fz, G.camRot, G.zoom, G.ax + ((Math.random() - 0.5) * shake) / V.W, G.ay + ((Math.random() - 0.5) * shake) / V.H);
-  drawScene(cockpit ? cockpitCtx : ctx, {
+  drawScene(ctx, {
+    cockpit,
     time: G.time, frame: G.frame, plane: p, model: G.model, scenery: G.scenery, puffs: G.puffs,
     inStorm: G.mode === 'flying' && (G.inCell || G.underCell), showPlane: !cockpit, wrecked: G.wrecked, budget: G.frame < G.boost ? 40 : 3,
     sky: G.sky, skyH, dark, speedFrac: airborne ? frac : 0,
@@ -1068,8 +1069,6 @@ function frame(now, once) {
   if (cockpit) { // tip the whole outside world with the bank, then draw the cockpit level on top
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.imageSmoothingEnabled = false;
-    ctx.translate(V.W / 2, V.H / 2); ctx.rotate(-p.roll * 0.5); ctx.scale(1.3, 1.3);
-    ctx.drawImage(cockpitCanvas, -V.W / 2, -V.H / 2);
     drawCockpit(ctx, V.W, V.H, {
       speed: p.speed / (G.stats.speed * (1 + G.stats.space)), alt: realAlt / G.stats.ceil, fuel: G.ac.fuel / G.stats.tank,
       roll: p.roll, vz: clamp(p.vz / G.stats.climb, -1, 1), time: G.time,
