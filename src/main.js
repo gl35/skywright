@@ -22,7 +22,7 @@ const ZK = 1.9; // overall zoom: how many screen pixels one world cell covers
 // Camera views. tilt squashes the ground, elev is how far height lifts things up the screen:
 // a low tilt with a high elev looks along the ground instead of down at it.
 const VIEWS = [
-  { name: 'TOP', tilt: 0.62, elev: 0.75, ay: 0.6, zm: 1, sky: 0, skyH: 0.45 },
+  { name: 'TOP', tilt: 0.7, elev: 0.7, ay: 0.6, zm: 0.82, sky: 0, skyH: 0.45 },
   { name: 'TAIL', tilt: 0.36, elev: 0.93, ay: 0.74, zm: 1.3, sky: 1, skyH: 0.36 },
   { name: 'COCKPIT', tilt: 0.3, elev: 0.95, ay: 0.98, zm: 1.6, sky: 1, skyH: 0.42 },
 ];
@@ -961,11 +961,18 @@ function frame(now, once) {
   const vw = onFoot ? FOOT[G.foot.view] : inFlight ? VIEWS[G.view] : VIEWS[0];
   const dark = Math.max(world().dark, clamp((p.alt - 50) / 120, 0, 1));
   let tz, tax, tay;
+  // The top view is a fixed map with north at the top: the aircraft turns on the screen and the world stays put.
+  // The other views sit behind the aircraft and turn with it.
+  const northUp = vw === VIEWS[0] && (inFlight || G.mode === 'title');
   if (inFlight || G.mode === 'title') {
-    G.camRot += angDiff(-p.heading - Math.PI / 2, G.camRot) * Math.min(1, dt * 3);
+    G.camRot += angDiff(northUp ? 0 : -p.heading - Math.PI / 2, G.camRot) * Math.min(1, dt * 3);
     tz = (p.alt < 60 ? lerp(3.5, 1.9, Math.min(1, p.alt / 45)) : lerp(2.0, 1.25, clamp((p.alt - 60) / 160, 0, 1))) * vw.zm * ZK;
     tz *= 1.06 - 0.14 * Math.min(1, frac); // pull back as speed builds
     tax = 0.5; tay = G.mode === 'title' ? 0.78 : vw.ay + (G.view === 2 ? 0 : 0.07 * Math.min(1, frac)); // and look further ahead
+    if (northUp && G.mode !== 'title') { // keep the aircraft towards the back of the screen so most of the view is what lies ahead
+      const lead = 0.2 + 0.08 * Math.min(1, frac);
+      tax = 0.5 - Math.cos(p.heading) * lead; tay = 0.52 - Math.sin(p.heading) * lead;
+    }
   } else if (onFoot) { // close in behind the pilot, or at their eye
     G.camRot += angDiff(-G.foot.rot - Math.PI / 2, G.camRot) * Math.min(1, dt * 5);
     tz = vw.zoom; tax = 0.5; tay = vw.ay;
@@ -976,17 +983,13 @@ function frame(now, once) {
   }
   const kk = Math.min(1, dt * 2.5);
   G.zoom = lerp(G.zoom, tz * V.q, kk); G.ax = lerp(G.ax, tax, kk); G.ay = lerp(G.ay, tay, kk);
-  // The ordinary view follows your height: down low the camera drops behind you and looks along the ground
-  // to the horizon; as you climb it swings up until it is looking almost straight down.
+  // The tail view follows your height and your nose. Down low it looks along the ground to the horizon and
+  // higher up it looks further down; nose up lifts it to the sky, nose down tips it onto the ground.
   let tTilt = vw.tilt, tElev = vw.elev, tSky = vw.sky, skyH = vw.skyH;
-  if (vw === VIEWS[0] && (inFlight || G.mode === 'title')) {
+  if (vw === VIEWS[1] && inFlight) {
     const t = clamp((p.alt - 7) / 27, 0, 1), a = t * t * (3 - 2 * t);
-    tTilt = lerp(0.38, 0.74, a); tElev = lerp(0.92, 0.66, a); tSky = 1 - clamp((a - 0.2) / 0.4, 0, 1); skyH = lerp(0.3, 0.45, a);
-    G.ay = lerp(G.ay, tay + 0.12 * (1 - a), kk);
-  }
-  // and it pitches with the aircraft: nose up lifts the view to the horizon and the sky, nose down tips it onto the ground
-  if (G.mode === 'flying' && G.view < 2) {
-    const pf = clamp(p.lean / 0.8, -1, 1);
+    tTilt = lerp(0.3, 0.5, a); tElev = lerp(0.95, 0.85, a); skyH = lerp(0.4, 0.3, a);
+    const pf = G.mode === 'flying' ? clamp(p.lean / 0.8, -1, 1) : 0;
     tTilt = clamp(tTilt - 0.14 * pf, 0.24, 0.82); skyH = clamp(skyH + 0.16 * pf, 0.1, 0.62);
     if (pf > 0) tSky = Math.min(1, tSky + pf * 1.6);
   }
