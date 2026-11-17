@@ -46,14 +46,19 @@ export function watchSpeed(dt) {
   return false;
 }
 
+// Great heights are drawn greater still, so that from orbit the islands shrink to dots and the world falls away.
+// Everything with a height goes through this, so trails and smoke stay with the aircraft.
+export const up = (z) => (z < 60 ? z : 60 + (z - 60) * 3.2);
+
 // ---------- camera ----------
 const S = { h: 0, r: 0, g: 0, b: 0, wood: false, lf: 0 };
 const tgt = new THREE.Vector3(), tmp = new THREE.Vector3();
 // Look at world (x, y) at height alt from behind and above. rot turns the view, zoom sets how close,
 // (ax, ay) is where on the screen the subject sits, and V.tilt says how steeply the camera looks down.
 export function setCamera(x, y, alt, rot, zoom, ax, ay) {
+  alt = up(alt);
   V.camx = x; V.camy = y; V.rot = rot; V.zoom = zoom; V.c = Math.cos(rot); V.s = Math.sin(rot);
-  const pitch = Math.asin(Math.min(0.97, Math.max(0.12, V.tilt * 1.15)));
+  const pitch = Math.asin(Math.min(0.97, Math.max(-0.95, V.tilt * 1.15))); // negative: the camera is below, looking up
   const fov = camera.aspect < 1 ? 58 : 45; // a phone held upright needs a wider lens to see to the sides
   const d = V.H / zoom / (2 * Math.tan((fov * Math.PI) / 360));
   const ux = -Math.sin(rot), uy = -Math.cos(rot); // the way "up the screen" points on the map
@@ -72,7 +77,7 @@ export function setCamera(x, y, alt, rot, zoom, ax, ay) {
 const P = [0, 0];
 // World point to overlay pixels. A point behind the camera is thrown far off the screen on the right side.
 export function project(x, y, z) {
-  tmp.set(x, z, y).applyMatrix4(camera.matrixWorldInverse);
+  tmp.set(x, up(z), y).applyMatrix4(camera.matrixWorldInverse);
   const behind = tmp.z > 0;
   tmp.applyMatrix4(camera.projectionMatrix);
   let sx = (tmp.x * 0.5 + 0.5) * V.W, sy = (1 - (tmp.y * 0.5 + 0.5)) * V.H;
@@ -410,7 +415,7 @@ function updatePlane(pl, model, sc, time) {
   if (!planeG.visible) return;
   // on the ground she sits on the ground you can see
   const belly = (model.nz * model.vs) / 2, floor = levelAt(pl.x, pl.y) * HZ + belly;
-  let y = pl.alt;
+  let y = up(pl.alt);
   if (pl.alt - floor < 0.35) y = seenFloor(pl.x, pl.y, floor - belly) + belly + (pl.alt - floor);
   planeG.position.set(pl.x, y, pl.y);
   planeG.rotation.set(pl.roll * model.rollK, -pl.heading, pl.pitchV !== undefined ? pl.pitchV : Math.max(-1.2, Math.min(1.2, (pl.lean || 0) * 0.42)));
@@ -485,7 +490,7 @@ scene.add(trails);
 const ringGeo = new THREE.RingGeometry(0.92, 1, 40).rotateX(-Math.PI / 2);
 function updateFx(sc, pl, time) {
   let n = 0, rings = 0;
-  const put = (x, y, z, r, g, b, a, s) => { if (n >= MAXP) return; pPos[n * 3] = x; pPos[n * 3 + 1] = z; pPos[n * 3 + 2] = y; pCol[n * 4] = r; pCol[n * 4 + 1] = g; pCol[n * 4 + 2] = b; pCol[n * 4 + 3] = a; pSize[n] = s; n++; };
+  const put = (x, y, z, r, g, b, a, s) => { if (n >= MAXP) return; pPos[n * 3] = x; pPos[n * 3 + 1] = up(z); pPos[n * 3 + 2] = y; pCol[n * 4] = r; pCol[n * 4 + 1] = g; pCol[n * 4 + 2] = b; pCol[n * 4 + 3] = a; pSize[n] = s; n++; };
   for (const f of sc.fx || []) {
     const a = Math.max(0, 1 - f.age / f.life);
     if (f.kind === 'ring') {
@@ -508,7 +513,7 @@ function updateFx(sc, pl, time) {
     const a = tr[i - 1], b = tr[i], age = time - b.t;
     if (age > 2.2 || a.cut || b.cut) continue;
     const al = b.a * (1 - age / 2.2);
-    tPos.set([a.x, a.z, a.y, b.x, b.z, b.y], t * 6);
+    tPos.set([a.x, up(a.z), a.y, b.x, up(b.z), b.y], t * 6);
     tCol.set([1, 1, 1, al, 1, 1, 1, al], t * 8); t++;
   }
   tGeo.setDrawRange(0, t * 2);
@@ -605,8 +610,8 @@ export function drawScene(ctx, sc) {
   if (sc.cockpit) { // sit in the seat: look along the nose, and bank with the wings
     camera.clearViewOffset();
     camera.fov = 68;
-    camera.position.set(pl.x, pl.alt + 0.9, pl.y);
-    cockpitE.set(Math.max(-0.5, Math.min(0.5, (pl.lean || 0) * 0.35)) - 0.1, -pl.heading - Math.PI / 2, -pl.roll * 0.8);
+    camera.position.set(pl.x, up(pl.alt) + 0.9, pl.y);
+    cockpitE.set(pl.pitchV !== undefined ? pl.pitchV : Math.max(-0.5, Math.min(0.5, (pl.lean || 0) * 0.35)) - 0.1, -pl.heading - Math.PI / 2, -pl.roll * 0.8);
     camera.quaternion.setFromEuler(cockpitE);
     camera.updateProjectionMatrix(); camera.updateMatrixWorld();
   } else if (sc.eye) { // on foot, through the pilot's own eyes

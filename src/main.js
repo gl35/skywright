@@ -32,7 +32,7 @@ const FOOT = [
   { name: 'FIRST PERSON', tilt: 0.33, elev: 0.94, ay: 0.9, zoom: 15, sky: 1, skyH: 0.4, eye: 2.3 },
 ];
 // Great heights are drawn compressed so the ground stays in the picture.
-const visAlt = (a) => (a < 40 ? a : 40 + (a - 40) * 0.3);
+const visAlt = (a) => a; // in 3D heights are drawn true (the old flat view had to squash them)
 const cockpitCanvas = document.createElement('canvas');
 const cockpitCtx = cockpitCanvas.getContext('2d', { alpha: false });
 
@@ -533,9 +533,12 @@ function updateLaunch(dt) {
   p.throttle = input.throttle; p.propSpin = 1; p.roll = 0;
   const here = levelAt(p.x, p.y), pad = here * HZ + G.belly, tall = (m.nx * m.vs) / 2 - G.belly; // how much higher her middle sits when upright
   const base = here * HZ;
-  const smoke = (n, fire) => {
-    burst(n, p.x + rnd(-1, 1), p.y + rnd(-1, 1), Math.max(base, p.alt - tall - G.belly), { v0: 3, v1: 11, up0: 0, up1: 2.5, life: 1.5, col: '232,232,236', size: 7, grow: 2, alpha: 0.6, floor: base });
-    if (fire) burst(2, p.x, p.y, p.alt - tall - G.belly - 1, { v0: 0, v1: 2, up0: -9, up1: -4, life: 0.35, col: Math.random() < 0.5 ? '255,236,150' : '255,150,60', size: 5 });
+  const smoke = (n, fire) => { // from the tail, wherever the tail is as she leans over
+    const half = (m.nx * m.vs) / 2, cp = Math.cos(p.pitchV || 0), sp = Math.sin(p.pitchV || 0);
+    const tx = p.x - Math.cos(p.heading) * cp * half, ty = p.y - Math.sin(p.heading) * cp * half, tz = Math.max(base, p.alt - sp * half);
+    const low = tz - base < 12; // near the ground the smoke billows out sideways; higher up it is left behind as a trail
+    burst(n, tx + rnd(-1, 1), ty + rnd(-1, 1), tz, { v0: low ? 3 : 0.5, v1: low ? 11 : 3, up0: low ? 0 : -3, up1: low ? 2.5 : 0, life: low ? 1.5 : 2.6, col: '232,232,236', size: 7, grow: 2, alpha: 0.6, floor: base });
+    if (fire) burst(2, tx, ty, tz - 0.5, { v0: 0, v1: 2, up0: -9 * sp - 1, up1: -4 * sp, life: 0.35, col: Math.random() < 0.5 ? '255,236,150' : '255,150,60', size: 5 });
   };
   if (p.pitchV === undefined) p.pitchV = 0;
   if (!G.vto) {
@@ -552,20 +555,26 @@ function updateLaunch(dt) {
     G.shakeT = Math.max(G.shakeT, G.vtoT < 1.2 ? 0.12 : 0);
     if (G.vtoT <= 0) { G.vto = 2; G.shakeT = 0.7; thud(0.9, 1.4); ui.flash(); }
   } else {
+    // The climb to orbit. She stays nose-up almost all the way and only lies flat as she reaches orbit;
+    // the higher she is, the faster she goes. Closing the throttle hands her back to you to fly level.
     const agl = p.alt - pad - tall;
-    p.vz = Math.max(agl > 0.1 ? -6 : 0, Math.min(22, p.vz + (p.throttle > 0.3 ? 8 * p.throttle : -9) * dt));
+    p.vz = Math.max(agl > 0.1 ? -6 : 0, Math.min(13 + agl * 0.1, p.vz + (p.throttle > 0.3 ? 8 * p.throttle : -9) * dt));
     p.alt = Math.max(pad + tall, p.alt + p.vz * dt);
     if (Math.random() < dt * 40) smoke(agl < 14 ? 2 : 1, true);
     G.shakeT = Math.max(G.shakeT, agl < 20 ? 0.1 : 0);
-    if (agl > 26) { // lean over and pick up forward speed
-      p.pitchV = lerp(p.pitchV, 0.4, Math.min(1, dt * 1.6));
-      p.speed += (st.speed * 0.9 - p.speed) * Math.min(1, dt * 1.2);
-      p.x += Math.cos(p.heading) * p.speed * dt; p.y += Math.sin(p.heading) * p.speed * dt;
-    }
-    ui.setAlert(agl > 26 ? null : 'Lift-off', true);
-    if (agl > 46) { G.mode = 'flying'; G.lastLvl = here; G.vto = 0; p.pitchV = undefined; p.lean = 0.8; p.vz = Math.min(p.vz, st.climb); ui.setAlert(null); }
+    const k = clamp((agl - 26) / (ORBIT - pad - tall - 26), 0, 1);
+    p.pitchV = (Math.PI / 2) * (1 - Math.pow(k, 2.6));
+    p.speed += (st.speed * 2.2 * Math.cos(p.pitchV) - p.speed) * Math.min(1, dt * 1.5);
+    p.heading += input.turn * 0.25 * dt;
+    p.x += Math.cos(p.heading) * p.speed * dt; p.y += Math.sin(p.heading) * p.speed * dt;
+    G.ac.fuel = Math.max(0, G.ac.fuel - st.burn * 0.8 * p.throttle * dt);
+    ui.setAlert(agl < 26 ? 'Lift-off' : 'Climbing to orbit', true);
+    const handBack = () => { G.mode = 'flying'; G.lastLvl = here; G.vto = 0; p.lean = clamp(p.pitchV, 0, 1) * 0.8; p.pitchV = undefined; ui.setAlert(null); };
+    if (p.alt >= ORBIT) { p.vz = 0; handBack(); }
+    else if (agl > 30 && (p.throttle < 0.3 || G.ac.fuel <= 0)) { p.vz = Math.min(p.vz, st.climb); handBack(); }
   }
 }
+const ORBIT = 174; // the height at which a star raft is in orbit
 
 function updateTakeoff(dt) {
   if (G.stats.orbit) { updateLaunch(dt); return; }
@@ -1061,9 +1070,15 @@ function frame(now, once) {
   let tz, tax, tay;
   // The top view is a fixed map with north at the top: the aircraft turns on the screen and the world stays put.
   // The other views sit behind the aircraft and turn with it.
-  const northUp = vw === VIEWS[0] && (inFlight || G.mode === 'title');
+  const launching = G.mode === 'takeoff' && G.stats && G.stats.orbit && G.view !== 2;
+  const northUp = vw === VIEWS[0] && (inFlight || G.mode === 'title') && !launching;
   if (inFlight || G.mode === 'title') {
-    G.camRot += angDiff(northUp ? 0 : -p.heading - Math.PI / 2, G.camRot) * Math.min(1, dt * 3);
+    if (launching && G.vto < 2) G.camRot += dt * 0.3; // walk round her on the pad
+    else {
+      // during the climb the camera stands off to one side, so you can see her lean over; it comes round behind as she reaches orbit
+      const side = launching ? 1.25 * (1 - clamp((p.alt - ORBIT * 0.72) / (ORBIT * 0.28), 0, 1)) : 0;
+      G.camRot += angDiff(northUp ? 0 : -p.heading - Math.PI / 2 + side, G.camRot) * Math.min(1, dt * (launching ? 1.2 : 3));
+    }
     tz = (p.alt < 60 ? lerp(3.5, 1.9, Math.min(1, p.alt / 45)) : lerp(2.0, 1.25, clamp((p.alt - 60) / 160, 0, 1))) * vw.zm * ZK;
     tz *= 1.06 - 0.14 * Math.min(1, frac); // pull back as speed builds
     if (G.mode === 'down' || (G.mode === 'rollout' && G.skid)) tz *= 1.5; // close in on a crash or a skid
@@ -1088,11 +1103,16 @@ function frame(now, once) {
   if (vw === VIEWS[1] && inFlight) {
     const t = clamp((p.alt - 7) / 27, 0, 1), a = t * t * (3 - 2 * t);
     tTilt = lerp(0.3, 0.5, a); tElev = lerp(0.95, 0.85, a); skyH = lerp(0.4, 0.3, a);
+    tTilt += 0.3 * clamp((p.alt - 60) / 110, 0, 1); // from very high, look well down or there is only black to see
     const pf = G.mode === 'flying' ? clamp(p.lean / 0.8, -1, 1) : 0;
     tTilt = clamp(tTilt - 0.14 * pf, 0.24, 0.82); skyH = clamp(skyH + 0.16 * pf, 0.1, 0.62);
     if (pf > 0) tSky = Math.min(1, tSky + pf * 1.6);
   }
-  if (G.mode === 'takeoff' && G.stats.orbit) { tTilt = 0.24; G.ay = lerp(G.ay, 0.52, kk); } // a launch is watched from low down, the whole ship in view
+  if (launching) { // a launch: from low beside the pad, then dropping underneath to look up her length at the sky, then round behind as she levels in orbit
+    const a = clamp((p.alt - 14) / (ORBIT - 14), 0, 1);
+    tTilt = G.vto < 2 ? 0.2 : a < 0.7 ? lerp(0.2, -0.28, Math.min(1, a / 0.22)) : lerp(-0.28, 0.7, (a - 0.7) / 0.3);
+    G.ay = lerp(G.ay, 0.5, kk); G.zoom = lerp(G.zoom, tz * V.q * 0.6, kk);
+  }
   V.tilt = lerp(V.tilt, tTilt, kk); V.elev = lerp(V.elev, tElev, kk);
   G.sky = lerp(G.sky, Math.max(tSky, dark), kk);
   const cockpit = G.view === 2 && (G.mode === 'takeoff' || G.mode === 'flying' || G.mode === 'rollout');
