@@ -10,6 +10,7 @@ import { HZ, cloudsAround, ground, levelAt, world } from './world.js';
 import { hash2 } from './noise.js';
 import { animalsAround } from './wildlife.js';
 import { buildCraft } from './craft3d.js';
+import { buildProp, buildBeast, BEAST_LEN, buildPilot, posePilot } from './props3d.js';
 
 export const V = { W: 320, H: 480, q: 1, tilt: 0.62, elev: 0.75, camx: 0, camy: 0, rot: 0, zoom: 2.6, c: 1, s: 0 };
 
@@ -196,6 +197,15 @@ function voxMesh(m, vs) {
   mesh.scale.setScalar(vs); mesh.castShadow = true;
   return mesh;
 }
+// A building or prop: the smooth model stretched to the size the game gives it, standing on y = 0.
+// (Anything without a smooth model falls back to its voxel one.)
+function makeProp(name, mk) {
+  const g = buildProp(name);
+  if (!g) { const v = voxMesh(mk.m, mk.vs); const h = new THREE.Group(); v.position.y = (mk.m.nz / 2) * mk.vs; h.add(v); return h; }
+  g.scale.set(mk.m.nx * mk.vs, mk.m.nz * mk.vs, mk.m.ny * mk.vs);
+  g.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  return g;
+}
 // A pool of meshes reused every frame: ask for the i-th of a kind, and anything not asked for is hidden.
 const pools = {};
 function pooled(kind, i, make) {
@@ -344,9 +354,8 @@ function buildStatics(w, scenery) {
     }
     (s.marks || []).forEach((name, i) => {
       const mk = scenery.marks[name], at = s.slots ? s.slots[i] : SLOTS[i];
-      const mesh = voxMesh(mk.m, mk.vs);
-      mesh.position.set(s.x + at[0], top + (mk.m.nz / 2) * mk.vs, s.y + at[1]);
-      mesh.receiveShadow = true;
+      const mesh = makeProp(name, mk);
+      mesh.position.set(s.x + at[0], top, s.y + at[1]);
       statics.add(mesh);
     });
   }
@@ -537,8 +546,9 @@ function updateMarks(marks, time, scenery) {
     if (k.kind === 'task') {
       if (k.prop) {
         const mk = scenery.marks[k.prop];
-        const m = nextOf('prop:' + k.prop, () => voxMesh(mk.m, mk.vs));
-        m.position.set(k.x, k.gz + (mk.m.nz / 2) * mk.vs + (k.prop === 'boat' || k.prop === 'buoy' ? Math.sin(time * 2) * 0.15 : 0), k.y); m.rotation.y = -0.5;
+        const m = nextOf('prop:' + k.prop, () => makeProp(k.prop, mk));
+        const afloat = k.prop === 'boat' || k.prop === 'buoy' || k.prop === 'icebreaker' || k.prop === 'rafts';
+        m.position.set(k.x, (afloat ? -0.25 + Math.sin(time * 2) * 0.15 : seenFloor(k.x, k.y, k.gz)), k.y); m.rotation.y = -0.5;
       }
       if (k.done) continue;
       C.setRGB(...(k.col || '255,214,74').split(',').map((v) => v / 255), THREE.SRGBColorSpace);
@@ -558,23 +568,21 @@ function updateMarks(marks, time, scenery) {
 const beasts = [];
 function updateLife(sc, time, pl) {
   animalsAround(V.camx, V.camy, phone ? 260 : 340, time, pl, beasts);
-  const count = new Map();
   for (const e of beasts) {
-    if (!e.m.vox) continue;
-    const soft = e.alpha < 0.8, key = (soft ? 'beastS' : 'beast');
-    const i = count.get(key) || 0; count.set(key, i + 1);
-    const m = pooled(key, i, () => { const o = new THREE.Mesh(voxGeo(e.m.vox), soft ? voxMatSoft : voxMat); o.castShadow = !soft; return o; });
-    m.geometry = voxGeo(e.m.vox);
-    m.scale.setScalar(e.vs); m.rotation.y = -e.rot;
-    m.position.set(e.x, e.z + (e.m.nz / 2) * e.vs, e.y);
+    const m = nextOf('beast:' + e.kind, () => { const b = buildBeast(e.kind) || new THREE.Group(); b.scale.setScalar(BEAST_LEN[e.kind] || 1); return b; });
+    m.rotation.y = -e.rot;
+    if (e.sea) m.position.set(e.x, e.z + 0.6, e.y);
+    else if (e.bird) {
+      m.position.set(e.x, e.z, e.y);
+      const a = Math.sin(time * 8 + e.ph * 5) * 0.6, r = m.getObjectByName('wingR'), l = m.getObjectByName('wingL');
+      if (r) { r.rotation.x = a; l.rotation.x = -a; }
+    } else m.position.set(e.x, seenFloor(e.x, e.y, e.z) + (e.run ? Math.abs(Math.sin(time * 14 + e.x)) * 0.25 : 0), e.y);
   }
   const who = sc.pilot;
   if (who && sc.showPlane) {
-    const pm = sc.scenery.pilot[who.pose];
-    const m = pooled('pilot', 0, () => voxMesh(pm, 0.34));
-    m.geometry = voxGeo(pm.vox);
-    const gy = who.onTop ? who.z : seenFloor(who.x, who.y, who.z);
-    m.position.set(who.x, gy + (pm.nz / 2) * 0.34, who.y); m.rotation.y = -who.rot;
+    const m = nextOf('pilot', () => { const p = buildPilot(); p.scale.setScalar(2.7); return p; });
+    posePilot(m, who.pose, time);
+    m.position.set(who.x, who.onTop ? who.z : seenFloor(who.x, who.y, who.z), who.y); m.rotation.y = -who.rot;
   }
 }
 

@@ -5,7 +5,7 @@
 import * as THREE from 'three';
 
 const mats = new Map();
-const mat = (hex, o) => {
+export const mat = (hex, o) => {
   const key = hex + JSON.stringify(o || 0);
   let m = mats.get(key);
   if (!m) { m = new THREE.MeshStandardMaterial({ color: hex, roughness: 0.55, metalness: 0.08, ...o }); mats.set(key, m); }
@@ -14,10 +14,10 @@ const mat = (hex, o) => {
 const GLASS = () => mat(0x1c3a5a, { roughness: 0.08, metalness: 0.5 });
 const DARK = 0x2a2c33, STEEL = 0x8d939c;
 
-function add(g, mesh, x = 0, y = 0, z = 0) { mesh.position.set(x, y, z); mesh.castShadow = true; g.add(mesh); return mesh; }
+export function add(g, mesh, x = 0, y = 0, z = 0) { mesh.position.set(x, y, z); mesh.castShadow = true; g.add(mesh); return mesh; }
 
 // A body of revolution along x. profile: [[x, radius], ...] from tail to nose. sy/sz squash it to an oval.
-function body(profile, m, sy = 1, sz = 1, seg = 16) {
+export function body(profile, m, sy = 1, sz = 1, seg = 16) {
   const pts = profile.map(([x, r]) => new THREE.Vector2(Math.max(0.0005, r), x));
   const mesh = new THREE.Mesh(new THREE.LatheGeometry(pts, seg).rotateZ(-Math.PI / 2), m);
   mesh.scale.set(1, sy, sz);
@@ -25,7 +25,7 @@ function body(profile, m, sy = 1, sz = 1, seg = 16) {
 }
 // One solid panel between a root section and a tip section. Each section: leading edge x, chord, height y, thickness.
 // The root is at z = 0 and the tip at z = span. The top is gently curved by a ridge a third of the way back.
-function panelGeo(x0, c0, y0, t0, x1, c1, y1, t1, span) {
+export function panelGeo(x0, c0, y0, t0, x1, c1, y1, t1, span) {
   const sec = (x, c, y, t, z) => [[x, y, z], [x - c * 0.3, y + t / 2, z], [x - c, y, z], [x - c * 0.3, y - t / 2, z]]; // nose, top, tail, bottom
   const A = sec(x0, c0, y0, t0, 0), B = sec(x1, c1, y1, t1, span), v = [];
   const quad = (a, b, c, d) => v.push(...a, ...b, ...c, ...a, ...c, ...d);
@@ -52,12 +52,12 @@ function fin(g, m, o) {
   m.side = THREE.DoubleSide;
   return f;
 }
-const tube = (r, len, m, seg = 10) => new THREE.Mesh(new THREE.CylinderGeometry(r, r, len, seg).rotateZ(Math.PI / 2), m); // along x
-const post = (r, len, m) => new THREE.Mesh(new THREE.CylinderGeometry(r, r, len, 6), m); // upright
-const wheel = (r, w, m) => new THREE.Mesh(new THREE.CylinderGeometry(r, r, w, 14).rotateX(Math.PI / 2), m);
-const blob = (rx, ry, rz, m) => { const s = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 10), m); s.scale.set(rx, ry, rz); return s; };
+export const tube = (r, len, m, seg = 10) => new THREE.Mesh(new THREE.CylinderGeometry(r, r, len, seg).rotateZ(Math.PI / 2), m); // along x
+export const post = (r, len, m) => new THREE.Mesh(new THREE.CylinderGeometry(r, r, len, 6), m); // upright
+export const wheel = (r, w, m) => new THREE.Mesh(new THREE.CylinderGeometry(r, r, w, 14).rotateX(Math.PI / 2), m);
+export const blob = (rx, ry, rz, m) => { const s = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 10), m); s.scale.set(rx, ry, rz); return s; };
 // A strut between two points.
-function strut(g, m, a, b, r = 0.006) {
+export function strut(g, m, a, b, r = 0.006) {
   const A = new THREE.Vector3(...a), B = new THREE.Vector3(...b), s = post(r, A.distanceTo(B), m);
   s.position.copy(A).add(B).multiplyScalar(0.5);
   s.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), B.clone().sub(A).normalize());

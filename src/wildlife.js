@@ -140,7 +140,7 @@ export function animalsAround(cx, cy, radius, time, plane, out) {
             if (lv < 1) continue; // nobody walks on water
             out.push({
               m: mod.f[running ? Math.floor(time * 10 + i) % 2 : Math.floor(time * 1.5 + i * 0.7) % 2 && i % 2 ? 1 : 0],
-              x, y, z: lv * HZ, rot: running ? g.away + Math.sin(i * 7) * 0.3 : g.ph + i * 1.3 + Math.sin(time * 0.1 + i) * 0.6, vs: mod.vs, alpha: 1,
+              kind: g.kind, run: running, x, y, z: lv * HZ, rot: running ? g.away + Math.sin(i * 7) * 0.3 : g.ph + i * 1.3 + Math.sin(time * 0.1 + i) * 0.6, vs: mod.vs, alpha: 1,
             });
           }
         } else if (g.type === 'sea') {
@@ -152,13 +152,13 @@ export function animalsAround(cx, cy, radius, time, plane, out) {
             const x = g.x + Math.cos(g.head) * along - Math.sin(g.head) * side, y = g.y + Math.sin(g.head) * along + Math.cos(g.head) * side;
             const breath = Math.sin(time * 0.45 * fast + g.ph + i * 1.9); // up for air, then under again
             const z = breath * 1.5 - 1.2;
-            out.push({ m: mod.f[0], x, y, z, rot: g.head + (back ? Math.PI : 0), vs: mod.vs, alpha: Math.max(0.22, Math.min(1, 0.3 + (z + 1.6) * 0.75)), spout: g.kind !== 'orca' && breath > 0.86 });
+            out.push({ kind: g.kind, sea: true, m: mod.f[0], x, y, z, rot: g.head + (back ? Math.PI : 0), vs: mod.vs, alpha: Math.max(0.22, Math.min(1, 0.3 + (z + 1.6) * 0.75)), spout: g.kind !== 'orca' && breath > 0.86 });
           }
         } else {
           for (let i = 0; i < g.n; i++) { // a V of birds wheeling round
             const a = (time * 0.22 + g.ph) * g.dir - (Math.ceil(i / 2) * 0.16) * g.dir;
             const r = 16 + (i % 2 ? 1 : -1) * Math.ceil(i / 2) * 1.6;
-            out.push({ m: mod.f[Math.floor(time * 5 + i * 0.6) % 2], x: g.x + Math.cos(a) * r, y: g.y + Math.sin(a) * r, z: g.alt, rot: a + (Math.PI / 2) * g.dir, vs: mod.vs, alpha: 1 });
+            out.push({ kind: g.kind, bird: true, ph: i * 0.6, m: mod.f[Math.floor(time * 5 + i * 0.6) % 2], x: g.x + Math.cos(a) * r, y: g.y + Math.sin(a) * r, z: g.alt, rot: a + (Math.PI / 2) * g.dir, vs: mod.vs, alpha: 1 });
           }
         }
       }
