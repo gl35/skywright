@@ -28,7 +28,7 @@ const VIEWS = [
 ];
 // On foot: looking over the pilot's shoulder, or through their eyes.
 const FOOT = [
-  { name: 'THIRD PERSON', tilt: 0.42, elev: 0.9, ay: 0.7, zoom: 15, sky: 1, skyH: 0.3, eye: 0 },
+  { name: 'THIRD PERSON', tilt: 0.3, elev: 0.9, ay: 0.62, zoom: 42, sky: 1, skyH: 0.3, eye: 0 },
   { name: 'FIRST PERSON', tilt: 0.33, elev: 0.94, ay: 0.9, zoom: 15, sky: 1, skyH: 0.4, eye: 2.3 },
 ];
 // Great heights are drawn compressed so the ground stays in the picture.
@@ -1060,7 +1060,7 @@ function frame(now, once) {
   const fx = onFoot && who ? who.x : p.x, fy = onFoot && who ? who.y : p.y, fz = onFoot && who ? who.z + vw.eye : p.alt;
   setCamera(fx, fy, fz, G.camRot, G.zoom, G.ax + ((Math.random() - 0.5) * shake) / V.W, G.ay + ((Math.random() - 0.5) * shake) / V.H);
   drawScene(ctx, {
-    cockpit,
+    cockpit, eye: onFoot && G.foot.view === 1 && who ? { x: who.x, y: who.y, z: who.z, rot: who.rot } : null,
     time: G.time, frame: G.frame, plane: p, model: G.model, scenery: G.scenery, puffs: G.puffs,
     inStorm: G.mode === 'flying' && (G.inCell || G.underCell), showPlane: !cockpit, wrecked: G.wrecked, budget: G.frame < G.boost ? 40 : 3,
     sky: G.sky, skyH, dark, speedFrac: airborne ? frac : 0,

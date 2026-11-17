@@ -52,14 +52,15 @@ const tgt = new THREE.Vector3(), tmp = new THREE.Vector3();
 export function setCamera(x, y, alt, rot, zoom, ax, ay) {
   V.camx = x; V.camy = y; V.rot = rot; V.zoom = zoom; V.c = Math.cos(rot); V.s = Math.sin(rot);
   const pitch = Math.asin(Math.min(0.97, Math.max(0.12, V.tilt * 1.15)));
-  const d = (1.21 * V.H) / zoom;
+  const fov = camera.aspect < 1 ? 58 : 45; // a phone held upright needs a wider lens to see to the sides
+  const d = V.H / zoom / (2 * Math.tan((fov * Math.PI) / 360));
   const ux = -Math.sin(rot), uy = -Math.cos(rot); // the way "up the screen" points on the map
   tgt.set(x, alt, y);
   camera.position.set(x - ux * Math.cos(pitch) * d, alt + Math.sin(pitch) * d, y - uy * Math.cos(pitch) * d);
   const floor = ground(camera.position.x, camera.position.z, S).h + 1.5;
   if (camera.position.y < floor) camera.position.y = floor;
   camera.up.set(0, 1, 0);
-  camera.fov = 45;
+  camera.fov = fov;
   camera.lookAt(tgt);
   const w = window.innerWidth, h = window.innerHeight;
   camera.setViewOffset(w, h, (0.5 - ax) * w, (0.5 - ay) * h, w, h);
@@ -598,6 +599,14 @@ export function drawScene(ctx, sc) {
     camera.fov = 68;
     camera.position.set(pl.x, pl.alt + 0.9, pl.y);
     cockpitE.set(Math.max(-0.5, Math.min(0.5, (pl.lean || 0) * 0.35)) - 0.1, -pl.heading - Math.PI / 2, -pl.roll * 0.8);
+    camera.quaternion.setFromEuler(cockpitE);
+    camera.updateProjectionMatrix(); camera.updateMatrixWorld();
+  } else if (sc.eye) { // on foot, through the pilot's own eyes
+    const e = sc.eye;
+    camera.clearViewOffset();
+    camera.fov = 62;
+    camera.position.set(e.x, seenFloor(e.x, e.y, e.z) + 2.5, e.y);
+    cockpitE.set(-0.05, -e.rot - Math.PI / 2, 0);
     camera.quaternion.setFromEuler(cockpitE);
     camera.updateProjectionMatrix(); camera.updateMatrixWorld();
   } else camera.updateProjectionMatrix();
