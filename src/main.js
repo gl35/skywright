@@ -61,7 +61,8 @@ const G = {
 function loadSave() {
   try {
     const s = JSON.parse(localStorage.getItem(SAVE_KEY));
-    return s && s.v === 2 ? s : null;
+    if (s && s.v === 2) { if (s.mission > 5) s.mission++; s.v = 3; } // v3 added a flight after the fifth
+    return s && s.v === 3 ? s : null;
   } catch { return null; }
 }
 function persist() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(G.save)); } catch { /* private mode */ } }
@@ -269,7 +270,7 @@ const actions = {
     if (G.mode === 'hangar') {
       const st = world().stops[G.mission.from];
       p.x = st.x - 20; p.y = st.y; p.heading = 0;
-      G.legTime = 0; G.transited = false; G.burnT = 0;
+      G.legTime = 0; G.transited = false; G.burnT = 0; G.fixT = 0; G.fix = null;
       planExtras();
     }
     p.speed = 0; p.vz = 0; p.roll = 0;
@@ -406,7 +407,7 @@ function planExtras() {
       if (at) G.task = { ...T, x: at.x, y: at.y, r: T.type === 'land' ? 26 : 24, gz: levelAt(at.x, at.y) * HZ, kind: 'task', done: false };
     }
   }
-  const n = Math.floor(len / 110);
+  const n = m.radio ? 0 : Math.floor(len / 110); // no trail of sparks to follow when you are meant to navigate
   for (let i = 1; i <= n; i++) {
     const t = i / (n + 1);
     if (t < 0.07 || t > 0.93) continue;
@@ -591,6 +592,11 @@ function updateFlight(dt) {
   p.lean = loopAt >= 0 ? Math.sin(2 * Math.PI * loopAt) * 2.4 : lerp(p.lean, clamp(p.vz / st.climb, -1, 1) * 0.8, Math.min(1, dt * 4));
   p.x += Math.cos(p.heading) * p.speed * dt;
   p.y += Math.sin(p.heading) * p.speed * dt;
+  if (m.wind) { p.x += m.wind[0] * dt; p.y += m.wind[1] * dt; } // a steady wind carries you off your line
+  if (m.radio) { // radio silence: the ship sends a bearing and distance only now and then
+    G.fixT = (G.fixT || 0) - dt;
+    if (G.fixT <= 0) { const d = G.target.stop; G.fixT = m.radio; G.fix = { brg: Math.atan2(d.y - p.y, d.x - p.x), dist: Math.hypot(d.x - p.x, d.y - p.y) }; beep(980, 0.05); }
+  }
 
   if (!dead) ac.fuel = Math.max(0, ac.fuel - st.burn * (0.25 + 0.75 * p.throttle * p.throttle) * (f.fuel ? 4 : 1) * (orbiting ? 0.1 : 1) * (ab === 'lean' ? 0.33 : ab === 'burner' ? 3 : ab === 'zoom' || ab === 'race' ? 2 : 1) * dt);
 
@@ -731,7 +737,7 @@ function completeMission() {
   if (extra.length || hard) body.push(`${extra.join(' \u00b7 ')}${hard ? ' Hard landing: slow down next time.' : ''}`);
   const cards = [{ title: m.title, body, note: m.real }];
   const next = MISSIONS[s.mission];
-  if (!next) cards.push({ title: 'The logbook is full', body: ['Sixteen flights, four dynasties, three worlds. Thanks for playing.'], btn: 'Keep flying' });
+  if (!next) cards.push({ title: 'The logbook is full', body: ['Seventeen flights, four dynasties, three worlds. Thanks for playing.'], btn: 'Keep flying' });
   else if (next.ch) cards.push({ ch: 'Next', title: next.ch, body: [next.brief], btn: 'Turn the page' });
   showCards(cards, enterHangar);
 }
@@ -1013,7 +1019,10 @@ function frame(now, once) {
     if (G.hudT <= 0) {
       G.hudT = 0.1;
       const d = destStop();
-      if (d) ui.updateHud(G, screenBearing(p.x, p.y, d.x, d.y), `${d.name}  ${km(Math.hypot(d.x - p.x, d.y - p.y))} km`, input.throttle);
+      const deg = (a) => String(Math.round((((a * 180) / Math.PI + 90) % 360 + 360) % 360) % 360).padStart(3, '0'); // compass: north is up the map
+      if (d && G.mission.radio && Math.hypot(d.x - p.x, d.y - p.y) > 350) // too far to see: steer by the last fix
+        ui.updateHud(G, null, G.fix ? `STEER ${deg(G.fix.brg)}° · YOU ${deg(p.heading)}° · ${km(G.fix.dist)} km` : 'Waiting for a fix', input.throttle);
+      else if (d) ui.updateHud(G, screenBearing(p.x, p.y, d.x, d.y), `${d.name}  ${km(Math.hypot(d.x - p.x, d.y - p.y))} km`, input.throttle);
       else ui.updateHud(G, null, 'Climb to the black sky', input.throttle);
       const job = G.task && !G.task.done && G.mode !== 'rollout' && G.mode !== 'down' ? G.task : null, O = ui.el.objective;
       const trip = G.mission.excursion && G.mode !== 'rollout' && G.mode !== 'down';

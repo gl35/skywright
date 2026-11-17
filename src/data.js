@@ -97,6 +97,8 @@ export const WORLDS = {
       { name: 'Cinder Reach', tag: 'Volcano observatory', biome: 'volcanic', x: 12200, y: 150, marks: ['hangar', 'tower'] },
       { name: 'Juniper Atoll', tag: 'Last stop before home', biome: 'tropical', x: 14800, y: -200, marks: ['hangar', 'tower'] },
       { name: 'Wrenfield', tag: 'Home field, the long way round', biome: 'temperate', x: 17000, y: 0, marks: ['hangar', 'tower'] },
+      // a ship, not a place: no island, just a deck in a wide empty sea, well off the main route
+      { name: 'Carrier Albatross', tag: 'Aircraft carrier', biome: 'arctic', x: 10400, y: -4600, marks: ['bridge'], slots: [[4, 5]], carrier: true },
     ],
   },
   han: {
@@ -243,7 +245,7 @@ export const KIT_CAP_COST = 120;
 export const KIT_CAP_MAX = 5;
 
 export const START_SAVE = () => ({
-  v: 2, mission: 0, money: 140,
+  v: 3, mission: 0, money: 140,
   fleet: {}, up: { engine: 0, tank: 0, frame: 0, avionics: 0 },
   kits: 2, kitCap: 3, shift: false, seen: {},
 });
@@ -285,7 +287,13 @@ export const MISSIONS = [
     arrive: ['Frostholm, 1938: a compass needle pointed straight up for six minutes.', 'Nan signed the visitors’ book that week. Occupation: "carpenter."'],
   },
   {
-    title: 'The long crossing', world: 'earth', from: 5, to: 6, craft: 'comet', pay: 1000,
+    // radio: seconds between position fixes (no nav arrow until the ship is close). wind: steady drift, in world units a second.
+    title: 'The General', world: 'earth', from: 5, to: 9, craft: 'kestrel', pay: 1400, radio: 20, wind: [3, 0.6],
+    brief: 'Fly the General to her carrier, far out at sea. Radio silence: one fix every 20 seconds. Fill the tank and mind the crosswind.',
+    arrive: ['The General steps onto the deck. "Your grandmother found my mother’s ship with no radio at all."', 'She lends you the jet lashed to the deck: the Comet.'],
+  },
+  {
+    title: 'The long crossing', world: 'earth', from: 9, to: 6, craft: 'comet', pay: 1000,
     brief: 'The longest leg, mostly ocean. Watch the fuel.',
     arrive: ['Dredged from the crater lake: a bronze earthquake bowl, eighteen centuries old.', 'Stamped inside the rim: a wren.'],
   },
@@ -362,18 +370,18 @@ export const TASKS = {
   2: { prop: 'buoy', water: true, type: 'pass', t: 0.5, off: -160, pay: 150, label: 'Fly over the weather buoy', after: 'Readings noted. The glass is falling.' },
   3: { prop: 'tents', type: 'land', t: 0.55, off: 110, pay: 240, label: 'Medicine for the camp: land there', after: 'The doctor’s parcel is delivered.' },
   4: { type: 'high', alt: 34, pay: 200, label: 'Survey photo: climb above 17,000 ft', after: 'The whole range under your wing. Click.' },
-  5: { prop: 'icebreaker', water: true, type: 'pass', t: 0.4, off: 190, pay: 180, label: 'Fly over the icebreaker', after: 'A hundred tiny arms wave.' },
-  6: { prop: 'vent', type: 'low', t: 0.5, off: -170, pay: 220, label: 'Drop the sensor: fly low over the crater', after: 'Into the steam it goes.' },
-  7: { type: 'high', alt: 80, pay: 250, label: 'Climb till the sky is black', after: 'There: a straight line on the sea.' },
-  8: { prop: 'hut', type: 'land', t: 0.5, off: 120, pay: 260, label: 'Collect the casting: land at the foundry', after: 'One bronze dragon head, still warm.' },
-  9: { prop: 'kite', type: 'pass', t: 0.45, off: -140, pay: 200, label: 'Fly past the survey kite', after: 'A kite, a plumb line, a brave monk’s notebook.' },
-  10: { prop: 'hut', type: 'low', t: 0.5, off: 150, pay: 220, label: 'Drop handbills: fly low over the town', after: 'A thousand printed sheets flutter down.' },
-  11: { prop: 'rafts', type: 'land', water: true, t: 0.5, off: -150, pay: 260, label: 'Take on teak: land by the rafts', after: 'The raftsmen laugh at your paddle wheels.' },
-  12: { type: 'high', alt: 175, pay: 300, label: 'Reach orbit: climb above 100 km', after: 'The engines go quiet. You are falling round the world.' },
+  6: { prop: 'icebreaker', water: true, type: 'pass', t: 0.4, off: 190, pay: 180, label: 'Fly over the icebreaker', after: 'A hundred tiny arms wave.' },
+  7: { prop: 'vent', type: 'low', t: 0.5, off: -170, pay: 220, label: 'Drop the sensor: fly low over the crater', after: 'Into the steam it goes.' },
+  8: { type: 'high', alt: 80, pay: 250, label: 'Climb till the sky is black', after: 'There: a straight line on the sea.' },
+  9: { prop: 'hut', type: 'land', t: 0.5, off: 120, pay: 260, label: 'Collect the casting: land at the foundry', after: 'One bronze dragon head, still warm.' },
+  10: { prop: 'kite', type: 'pass', t: 0.45, off: -140, pay: 200, label: 'Fly past the survey kite', after: 'A kite, a plumb line, a brave monk’s notebook.' },
+  11: { prop: 'hut', type: 'low', t: 0.5, off: 150, pay: 220, label: 'Drop handbills: fly low over the town', after: 'A thousand printed sheets flutter down.' },
+  12: { prop: 'rafts', type: 'land', water: true, t: 0.5, off: -150, pay: 260, label: 'Take on teak: land by the rafts', after: 'The raftsmen laugh at your paddle wheels.' },
+  13: { type: 'high', alt: 175, pay: 300, label: 'Reach orbit: climb above 100 km', after: 'The engines go quiet. You are falling round the world.' },
 };
 
 // The Ark's door. Each dynasty opens once the story has taken you there (the number is its mission).
-export const DOOR = [['han', 8], ['tang', 9], ['song', 10], ['ming', 11]];
+export const DOOR = [['han', 9], ['tang', 10], ['song', 11], ['ming', 12]];
 
 // Three things to find on a visit to each dynasty: fly low over the blue beam.
 // text is what you see; note separates the record from the story's invention.

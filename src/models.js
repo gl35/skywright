@@ -419,6 +419,19 @@ function hangar() {
   for (let y = 0; y < 10; y++) v.box(0, y, 4, 13, y, 4 + Math.round(2 * Math.sin((y / 9) * Math.PI)), y % 3 === 0 ? 0xb04632 : 0xc8523a);
   return { m: bake(v), vs: 0.6 };
 }
+// The island of an aircraft carrier: bridge, funnel and a radar mast.
+function bridge() {
+  const v = new Vox(12, 6, 16), GREY = 0x8d939c;
+  v.box(0, 0, 0, 11, 5, 4, GREY);
+  v.box(1, 0, 5, 7, 5, 6, GLASS);
+  v.box(1, 0, 7, 7, 5, 7, GREY);
+  v.box(9, 2, 5, 10, 3, 8, DARK);
+  v.box(4, 2, 8, 4, 3, 13, 0x6a707a);
+  v.box(2, 2, 12, 6, 3, 12, 0xc9ced6);
+  v.put(4, 2, 14, 0xff3b30);
+  return { m: bake(v), vs: 0.6 };
+}
+
 function tower() {
   const v = new Vox(5, 5, 11);
   v.box(1, 1, 0, 3, 3, 7, 0xd8d8d0);
@@ -510,7 +523,7 @@ export function buildScenery() {
   const rng = mulberry32(4242);
   const clouds = {};
   for (const k of Object.keys(CLOUDS)) { clouds[k] = []; for (let i = 0; i < (k === 'white' ? 6 : 4); i++) clouds[k].push(cloud(rng, CLOUDS[k])); }
-  const marks = { hangar: hangar(), tower: tower(), pagoda: pagoda(6), pagodaSmall: pagoda(3), gate: gate(), clock: clock(), ship: ship(), dome: dome(), mast: mast(), spire: spire(), lantern: lantern(), door: door(),
+  const marks = { bridge: bridge(), hangar: hangar(), tower: tower(), pagoda: pagoda(6), pagodaSmall: pagoda(3), gate: gate(), clock: clock(), ship: ship(), dome: dome(), mast: mast(), spire: spire(), lantern: lantern(), door: door(),
     lighthouse: lighthouse(), boat: fishingBoat(), icebreaker: icebreaker(), buoy: buoy(), tents: tents(), hut: hut(), kite: kite(), rafts: rafts(), vent: vent() };
   return { clouds, marks, pilot: [person(0), person(1), person(2)] };
 }

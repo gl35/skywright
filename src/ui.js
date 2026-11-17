@@ -232,6 +232,7 @@ export function planWarnings(G) {
   else if (r < d * 1.2) out.push(['warn', `Fuel is tight: ${km(r)} of ${km(d)} km.`]);
   for (const k of PART_KEYS) if (ac.cond[k] < 50) out.push(['warn', `${PARTS[k].name} worn: ${Math.round(ac.cond[k])}%.`]);
   if (s.kits === 0) out.push(['warn', 'No repair kits.']);
+  if (m.radio) out.push(['warn', `No nav arrow. A radio fix every ${m.radio} s: match YOU to STEER.`]);
   if (!m.transit && !st.orbit) {
     if (b.hs > 60 && st.ceil < 28) out.push(['warn', 'Peaks too high to climb. Use the valleys.']);
     if (b.storm > 0.1 && st.ceil < 31) out.push(['warn', 'Storms. Go round or stay low.']);

@@ -16,19 +16,23 @@ export const TS = NC + 1; // tile size in a chunk atlas (one cell of overlap wit
 export const TP = TS + 2; // tile pitch: a clear 1px gutter round each tile stops colours bleeding between tiles
 
 let cur = WORLDS.earth;
+// chain: the stops along the route, which set the biomes. ships: carriers, each a deck alone in open sea.
+let chain = cur.stops.filter((s) => !s.carrier), ships = cur.stops.filter((s) => s.carrier);
+const onDeck = (dx, dy) => Math.abs(dx) <= 34 && Math.abs(dy) <= (dx > 24 ? 7 - (dx - 24) * 0.45 : 7); // pointed at the bow
 const chunks = new Map();
 const cloudCells = new Map();
 export const world = () => cur;
 export function setWorld(id) {
   if (cur.id === id) return;
   cur = WORLDS[id];
+  chain = cur.stops.filter((s) => !s.carrier); ships = cur.stops.filter((s) => s.carrier);
   chunks.clear(); cloudCells.clear();
 }
 
 // ---------- biomes ----------
 let mA, mB, mT; // result of the last mix() call (avoids allocating per cell)
 function mix(x) {
-  const S = cur.stops, n = S.length;
+  const S = chain, n = S.length;
   if (x <= S[0].x) { mA = mB = BIOMES[S[0].biome]; mT = 0; return; }
   for (let i = 0; i < n - 1; i++) {
     if (x < S[i + 1].x) {
@@ -60,9 +64,16 @@ function terrain(x, y, stops) {
   let v = fbm(x / 70, y / 70, seed, 5) * 0.65 + vnoise(x / 260 + 31.7, y / 260 - 12.3, seed + 99) * 0.35 - lerp(mA.sea, mB.sea, mT);
   for (let i = 0; i < stops.length; i++) {
     const s = stops[i];
+    if (s.carrier) continue;
     const dx = (x - s.x) * 0.7, dy = y - s.y;
     const d2 = dx * dx + dy * dy;
     if (d2 < 8100) v += (1.5 / outHs - v) * smoothstep(90, 40, Math.sqrt(d2)); // flat ground under each landing place
+  }
+  for (let i = 0; i < ships.length; i++) {
+    const dx = x - ships[i].x, dy = y - ships[i].y, d2 = dx * dx + dy * dy;
+    if (d2 > 18490000) continue;
+    v = lerp(v, Math.min(v, -0.09), smoothstep(4300, 3900, Math.sqrt(d2))); // nothing but sea for a long way round
+    if (onDeck(dx, dy)) v = 1.5 / outHs; // the flight deck, at the height of any other landing ground
   }
   outV = v;
 }
@@ -125,7 +136,8 @@ function genChunk(cx, cy) {
       const i = ix + 1 + (iy + 1) * N;
       const L = lv[i];
       const h = hash2(gx0 + 1 + ix, gy0 + 1 + iy, 7);
-      let r, g, b;
+      let r, g, b, steel = false;
+      for (let s = 0; s < near.length; s++) if (near[s].carrier && onDeck(x - near[s].x, y - near[s].y)) steel = true;
       if (L === 0) {
         const depth = -vv[i] + (h - 0.5) * 0.006;
         const shore = lv[i - 1] || lv[i + 1] || lv[i - N] || lv[i + N];
@@ -138,11 +150,12 @@ function genChunk(cx, cy) {
         else if (lv[i + 1] < L || lv[i + N] < L) f *= 1.07; // sunlit edge
         if (trees && (L === 4 || L === 5) && h > 0.7) f *= 0.76;
         r = land[L * 3] * f; g = land[L * 3 + 1] * f; b = land[L * 3 + 2] * f;
+        if (steel) { r = g = 96 * f; b = 104 * f; }
         if (L === 2) {
           for (let s = 0; s < near.length; s++) { // paint the landing ground
             const dx = x - near[s].x, dy = y - near[s].y;
             const onStrip = Math.abs(dx) <= 22 && Math.abs(dy) <= 2;
-            const onApron = dx >= -12 && dx <= 10 && dy >= -13 && dy <= -3;
+            const onApron = !steel && dx >= -12 && dx <= 10 && dy >= -13 && dy <= -3;
             if (pad === 'runway') {
               if (onStrip) { const mark = Math.abs(dx) >= 21 || (dy >= -0.5 && dy <= 0 && ((Math.floor(dx) + 24) & 3) < 2); r = g = b = mark ? 222 : 84 + h * 10; b += 4; }
               else if (onApron) { r = 158 + h * 8; g = 160 + h * 8; b = 156 + h * 8; }
@@ -164,11 +177,12 @@ function genChunk(cx, cy) {
       for (let k = 0; k <= L; k++) {
         const o = ((iy + 1) * W + k * TP + 1 + ix) * 4;
         if (k === L) { D[o] = r; D[o + 1] = g; D[o + 2] = b; }
+        else if (steel) { D[o] = 62; D[o + 1] = 66; D[o + 2] = 74; }
         else { D[o] = side[k * 3]; D[o + 1] = side[k * 3 + 1]; D[o + 2] = side[k * 3 + 2]; }
         D[o + 3] = 255;
         if (k > 0) { // "side" row, used to fill the gaps between layers
           const o2 = ((iy + 1 + TP) * W + k * TP + 1 + ix) * 4;
-          D[o2] = side[k * 3]; D[o2 + 1] = side[k * 3 + 1]; D[o2 + 2] = side[k * 3 + 2]; D[o2 + 3] = 255;
+          D[o2] = steel ? 62 : side[k * 3]; D[o2 + 1] = steel ? 66 : side[k * 3 + 1]; D[o2 + 2] = steel ? 74 : side[k * 3 + 2]; D[o2 + 3] = 255;
         }
       }
     }

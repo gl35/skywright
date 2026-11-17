@@ -340,7 +340,8 @@ export function drawScene(ctx, scene) {
     if (Math.abs(s.x - V.camx) > 400 || Math.abs(s.y - V.camy) > 500) continue;
     (s.marks || []).forEach((name, i) => {
       const mk = scenery.marks[name];
-      drawStack(ctx, mk.m, s.x + SLOTS[i][0], s.y + SLOTS[i][1], 2 * HZ + (mk.m.nz / 2) * mk.vs, 0, mk.vs);
+      const at = s.slots ? s.slots[i] : SLOTS[i];
+      drawStack(ctx, mk.m, s.x + at[0], s.y + at[1], 2 * HZ + (mk.m.nz / 2) * mk.vs, 0, mk.vs);
     });
   }
 
