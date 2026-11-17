@@ -3,15 +3,17 @@
 import { AIRCRAFT, MISSIONS, WORLDS, UP_COST } from './data.js';
 
 // up: the player's own upgrade levels, which apply to whatever they are flying.
+// Everything flies FAST times quicker than its data says, and burns fuel to match, so ranges are unchanged.
+const FAST = 1.5;
 export function calcStats(id, up) {
   const A = AIRCRAFT[id];
   return {
-    speed: A.speed * (1 + 0.08 * up.engine),
-    climb: A.climb * (1 + 0.08 * up.engine),
+    speed: A.speed * FAST * (1 + 0.08 * up.engine),
+    climb: A.climb * 1.25 * (1 + 0.08 * up.engine),
     ceil: A.ceil,
     tank: A.tank,
-    burn: A.burn / (1 + 0.15 * up.tank),
-    turn: A.turn,
+    burn: (A.burn * FAST) / (1 + 0.15 * up.tank),
+    turn: A.turn * 1.15,
     wear: A.wear * (1 - 0.15 * up.frame),
     failMul: 1 - 0.2 * up.avionics,
     radar: up.avionics >= 1,

@@ -288,7 +288,7 @@ export const MISSIONS = [
   },
   {
     // radio: seconds between position fixes (no nav arrow until the ship is close). wind: steady drift, in world units a second.
-    title: 'The General', world: 'earth', from: 5, to: 9, craft: 'kestrel', pay: 1400, radio: 20, wind: [3, 0.6],
+    title: 'The General', world: 'earth', from: 5, to: 9, craft: 'kestrel', pay: 1400, radio: 20, wind: [4.5, 0.9],
     brief: 'Fly the General to her carrier, far out at sea. Radio silence: one fix every 20 seconds. Fill the tank and mind the crosswind.',
     arrive: ['The General steps onto the deck. "Your grandmother found my mother’s ship with no radio at all."', 'She lends you the jet lashed to the deck: the Comet.'],
   },

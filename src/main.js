@@ -963,7 +963,7 @@ function frame(now, once) {
   let tz, tax, tay;
   if (inFlight || G.mode === 'title') {
     G.camRot += angDiff(-p.heading - Math.PI / 2, G.camRot) * Math.min(1, dt * 3);
-    tz = (p.alt < 60 ? lerp(3.0, 2.0, p.alt / 60) : lerp(2.0, 1.25, clamp((p.alt - 60) / 160, 0, 1))) * vw.zm * ZK;
+    tz = (p.alt < 60 ? lerp(3.5, 1.9, Math.min(1, p.alt / 45)) : lerp(2.0, 1.25, clamp((p.alt - 60) / 160, 0, 1))) * vw.zm * ZK;
     tz *= 1.06 - 0.14 * Math.min(1, frac); // pull back as speed builds
     tax = 0.5; tay = G.mode === 'title' ? 0.78 : vw.ay + (G.view === 2 ? 0 : 0.07 * Math.min(1, frac)); // and look further ahead
   } else if (onFoot) { // close in behind the pilot, or at their eye
@@ -976,8 +976,16 @@ function frame(now, once) {
   }
   const kk = Math.min(1, dt * 2.5);
   G.zoom = lerp(G.zoom, tz * V.q, kk); G.ax = lerp(G.ax, tax, kk); G.ay = lerp(G.ay, tay, kk);
-  V.tilt = lerp(V.tilt, vw.tilt, kk); V.elev = lerp(V.elev, vw.elev, kk);
-  G.sky = lerp(G.sky, Math.max(vw.sky, dark), kk);
+  // The ordinary view follows your height: down low the camera drops behind you and looks along the ground
+  // to the horizon; as you climb it swings up until it is looking almost straight down.
+  let tTilt = vw.tilt, tElev = vw.elev, tSky = vw.sky, skyH = vw.skyH;
+  if (vw === VIEWS[0] && (inFlight || G.mode === 'title')) {
+    const t = clamp((p.alt - 7) / 27, 0, 1), a = t * t * (3 - 2 * t);
+    tTilt = lerp(0.38, 0.74, a); tElev = lerp(0.92, 0.66, a); tSky = 1 - clamp((a - 0.2) / 0.4, 0, 1); skyH = lerp(0.3, 0.45, a);
+    G.ay = lerp(G.ay, tay + 0.12 * (1 - a), kk);
+  }
+  V.tilt = lerp(V.tilt, tTilt, kk); V.elev = lerp(V.elev, tElev, kk);
+  G.sky = lerp(G.sky, Math.max(tSky, dark), kk);
   const cockpit = G.view === 2 && (G.mode === 'takeoff' || G.mode === 'flying' || G.mode === 'rollout');
 
   const realAlt = p.alt;
@@ -988,7 +996,7 @@ function frame(now, once) {
   drawScene(cockpit ? cockpitCtx : ctx, {
     time: G.time, frame: G.frame, plane: p, model: G.model, scenery: G.scenery, puffs: G.puffs,
     inStorm: G.mode === 'flying' && (G.inCell || G.underCell), showPlane: !cockpit, budget: G.frame < G.boost ? 40 : 3,
-    sky: G.sky, skyH: vw.skyH, dark, speedFrac: airborne ? frac : 0,
+    sky: G.sky, skyH, dark, speedFrac: airborne ? frac : 0,
     marks: inFlight ? marksNear(p) : null, pilot: who && !who.hidden ? who : null, fx: G.fx,
   });
   if (cockpit) { // tip the whole outside world with the bank, then draw the cockpit level on top
