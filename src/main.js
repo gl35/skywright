@@ -984,6 +984,12 @@ function frame(now, once) {
     tTilt = lerp(0.38, 0.74, a); tElev = lerp(0.92, 0.66, a); tSky = 1 - clamp((a - 0.2) / 0.4, 0, 1); skyH = lerp(0.3, 0.45, a);
     G.ay = lerp(G.ay, tay + 0.12 * (1 - a), kk);
   }
+  // and it pitches with the aircraft: nose up lifts the view to the horizon and the sky, nose down tips it onto the ground
+  if (G.mode === 'flying' && G.view < 2) {
+    const pf = clamp(p.lean / 0.8, -1, 1);
+    tTilt = clamp(tTilt - 0.14 * pf, 0.24, 0.82); skyH = clamp(skyH + 0.16 * pf, 0.1, 0.62);
+    if (pf > 0) tSky = Math.min(1, tSky + pf * 1.6);
+  }
   V.tilt = lerp(V.tilt, tTilt, kk); V.elev = lerp(V.elev, tElev, kk);
   G.sky = lerp(G.sky, Math.max(tSky, dark), kk);
   const cockpit = G.view === 2 && (G.mode === 'takeoff' || G.mode === 'flying' || G.mode === 'rollout');
