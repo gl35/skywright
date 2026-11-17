@@ -9,6 +9,7 @@ import * as THREE from 'three';
 import { HZ, cloudsAround, ground, levelAt, world } from './world.js';
 import { hash2 } from './noise.js';
 import { animalsAround } from './wildlife.js';
+import { buildCraft } from './craft3d.js';
 
 export const V = { W: 320, H: 480, q: 1, tilt: 0.62, elev: 0.75, camx: 0, camy: 0, rot: 0, zoom: 2.6, c: 1, s: 0 };
 
@@ -368,31 +369,34 @@ let planeFor = null, planeBody = null, planeProps = [], planeJets = [], shield =
 const discMat = new THREE.MeshBasicMaterial({ color: 0x2a2a30, transparent: true, opacity: 0.28, side: THREE.DoubleSide, depthWrite: false });
 const bladeMat = new THREE.MeshLambertMaterial({ color: 0x2a2a30, side: THREE.DoubleSide });
 const flameMat = new THREE.MeshBasicMaterial({ color: 0xffb040, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false });
-function buildPlane(model) {
+let craftAnim = null, craftLen = 1;
+function buildPlane(model, id) {
   planeG.clear(); planeProps = []; planeJets = [];
-  planeBody = new THREE.Mesh(voxGeo(model.frames[0][Math.floor(model.frames[0].length / 2)].vox), voxMat);
-  planeBody.castShadow = true;
-  const holder = new THREE.Group(); holder.scale.setScalar(model.vs); holder.add(planeBody);
+  const L = model.nx * model.vs, belly = (model.nz * model.vs) / 2;
+  const c = buildCraft(id, model.tips / model.nx);
+  craftAnim = c.anim || null; craftLen = L;
+  const holder = new THREE.Group(); holder.scale.setScalar(L);
+  c.group.position.y = -belly / L - c.minY; // her lowest point rests where the game says her belly is
+  holder.add(c.group);
   planeG.add(holder);
-  const vs = model.vs, mx = (model.nx - 1) / 2, mz = (model.nz - 1) / 2;
-  for (const pr of model.props) {
+  for (const pr of c.props) {
     const g = new THREE.Group();
-    g.position.set((pr.x - mx) * vs, (pr.z - mz) * vs, pr.y * vs);
-    const disc = new THREE.Mesh(new THREE.CircleGeometry(pr.r * vs, 20).rotateY(Math.PI / 2), discMat);
-    const blade = new THREE.Mesh(new THREE.PlaneGeometry(pr.r * vs * 0.22, pr.r * vs * 2).rotateY(Math.PI / 2), bladeMat);
-    g.add(disc, blade); planeG.add(g); planeProps.push({ g, disc, blade });
+    g.position.set(pr.x, pr.y + c.group.position.y, pr.z);
+    const disc = new THREE.Mesh(new THREE.CircleGeometry(pr.r, 24).rotateY(Math.PI / 2), discMat);
+    const blade = new THREE.Mesh(new THREE.PlaneGeometry(pr.r * 0.16, pr.r * 2).rotateY(Math.PI / 2), bladeMat);
+    g.add(disc, blade); holder.add(g); planeProps.push({ g, disc, blade });
   }
-  for (const j of model.jets) {
-    const f = new THREE.Mesh(new THREE.ConeGeometry(vs * 1.3, 1, 8).rotateZ(Math.PI / 2).translate(-0.5, 0, 0), flameMat);
-    f.position.set((j.x - mx - 1) * vs, (j.z - mz) * vs, j.y * vs);
-    planeG.add(f); planeJets.push(f);
+  for (const j of c.jets) {
+    const f = new THREE.Mesh(new THREE.ConeGeometry(j.r, 1, 10).rotateZ(Math.PI / 2).translate(-0.5, 0, 0), flameMat);
+    f.position.set(j.x, j.y + c.group.position.y, j.z);
+    holder.add(f); planeJets.push(f);
   }
-  shield = new THREE.Mesh(new THREE.SphereGeometry(model.nx * vs * 0.6, 16, 10), new THREE.MeshBasicMaterial({ color: 0x8cf0ff, transparent: true, opacity: 0.25, depthWrite: false }));
+  shield = new THREE.Mesh(new THREE.SphereGeometry(L * 0.6, 16, 10), new THREE.MeshBasicMaterial({ color: 0x8cf0ff, transparent: true, opacity: 0.25, depthWrite: false }));
   planeG.add(shield);
   planeFor = model;
 }
 function updatePlane(pl, model, sc, time) {
-  if (planeFor !== model) buildPlane(model);
+  if (planeFor !== model) buildPlane(model, sc.craft);
   planeG.visible = sc.showPlane && !sc.wrecked;
   if (!planeG.visible) return;
   // on the ground she sits on the ground you can see
@@ -400,20 +404,16 @@ function updatePlane(pl, model, sc, time) {
   let y = pl.alt;
   if (pl.alt - floor < 0.35) y = seenFloor(pl.x, pl.y, floor - belly) + belly + (pl.alt - floor);
   planeG.position.set(pl.x, y, pl.y);
-  planeG.rotation.set(pl.roll * model.rollK, -pl.heading, Math.max(-1.2, Math.min(1.2, (pl.lean || 0) * 0.42)));
-  if (model.frames.length > 1) { // beating wings
-    const beat = model.fps * (0.45 + 0.75 * pl.throttle);
-    const pose = model.fps && pl.propSpin > 0.05 ? Math.floor(pl.spin * beat * 0.05) % model.frames.length : 0;
-    planeBody.geometry = voxGeo(model.frames[pose][Math.floor(model.frames[pose].length / 2)].vox);
-  }
+  planeG.rotation.set(pl.roll * model.rollK, -pl.heading, pl.pitchV !== undefined ? pl.pitchV : Math.max(-1.2, Math.min(1.2, (pl.lean || 0) * 0.42)));
+  if (craftAnim) craftAnim(pl.propSpin > 0.05 ? time * (9 + 9 * pl.throttle) : 0, pl.throttle); // beating wings
   const fast = pl.throttle > 0.45 && pl.propSpin > 0.5;
   for (const p of planeProps) {
     p.g.visible = true; p.g.rotation.x = pl.spin || 0;
     p.disc.visible = fast && pl.propSpin > 0.02; p.blade.visible = !fast;
   }
   for (const f of planeJets) {
-    const len = pl.propSpin > 0.1 ? (1 + pl.throttle * pl.throttle * 13) * (pl.boosting ? 2 : 1) * model.vs + Math.sin(time * 60) * 0.3 : 0;
-    f.visible = len > 0.2; f.scale.set(len, 1, 1);
+    const len = pl.propSpin > 0.1 ? ((1 + pl.throttle * pl.throttle * 13) * (pl.boosting ? 2 : 1) * model.vs + Math.sin(time * 60) * 0.3) / craftLen : 0;
+    f.visible = len > 0.02; f.scale.set(len, 1, 1);
   }
   shield.visible = !!pl.shield;
 }

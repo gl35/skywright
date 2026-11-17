@@ -98,7 +98,7 @@ function park() {
   const st = world().stops[G.mission.from];
   Object.assign(G.plane, { x: st.x - 2, y: st.y, heading: 0, speed: 0, vz: 0, roll: 0, lean: 0, throttle: 0, propSpin: 0, alt: 2 * HZ + G.belly });
   clearTrails();
-  G.wrecked = false; G.wreck = null; G.skid = 0;
+  G.wrecked = false; G.wreck = null; G.skid = 0; G.vto = 0; G.plane.pitchV = undefined;
 }
 // The landing ground the nav arrow points at, or null while still climbing out for a transit burn.
 const destStop = () => (!G.mission.transit || G.transited ? G.target.stop : null);
@@ -277,8 +277,8 @@ const actions = {
     }
     p.speed = 0; p.vz = 0; p.roll = 0;
     if (G.mode !== 'hangar') p.heading = clearestHeading(p); // out in the open: turn her to face the lowest ground
-    G.takeoffFrom = { x: p.x, y: p.y }; G.blockN = 0;
-    input.throttle = 0.85;
+    G.takeoffFrom = { x: p.x, y: p.y }; G.blockN = 0; G.vto = 0; p.pitchV = undefined;
+    input.throttle = G.stats.orbit ? 0 : 0.85; // a launch waits for you to open the throttle
     G.mode = 'takeoff';
     persist();
     ui.hidePanel();
@@ -526,7 +526,49 @@ function clearestHeading(p) {
 // ---------- flight ----------
 // The take-off run. The machine gathers speed along the strip by itself, but it stays on the
 // ground until the pilot pulls up. An airship just needs the pull: it rises from a standstill.
+// A star raft does not use a runway. She is stood on her tail, the engines are lit, and she goes straight up;
+// well clear of the ground she leans over into ordinary flight. G.vto: 0 = being raised, 1 = counting down, 2 = climbing.
+function updateLaunch(dt) {
+  const p = G.plane, st = G.stats, m = G.model;
+  p.throttle = input.throttle; p.propSpin = 1; p.roll = 0;
+  const here = levelAt(p.x, p.y), pad = here * HZ + G.belly, tall = (m.nx * m.vs) / 2 - G.belly; // how much higher her middle sits when upright
+  const base = here * HZ;
+  const smoke = (n, fire) => {
+    burst(n, p.x + rnd(-1, 1), p.y + rnd(-1, 1), Math.max(base, p.alt - tall - G.belly), { v0: 3, v1: 11, up0: 0, up1: 2.5, life: 1.5, col: '232,232,236', size: 7, grow: 2, alpha: 0.6, floor: base });
+    if (fire) burst(2, p.x, p.y, p.alt - tall - G.belly - 1, { v0: 0, v1: 2, up0: -9, up1: -4, life: 0.35, col: Math.random() < 0.5 ? '255,236,150' : '255,150,60', size: 5 });
+  };
+  if (p.pitchV === undefined) p.pitchV = 0;
+  if (!G.vto) {
+    p.pitchV = Math.min(Math.PI / 2, p.pitchV + dt * 1.3);
+    p.alt = pad + tall * Math.sin(p.pitchV); p.vz = 0; p.speed = 0;
+    if (p.pitchV < 1.55) ui.setAlert('Raising her for launch', true);
+    else if (p.throttle < 0.3) ui.setAlert('Open the throttle to launch', true);
+    else { G.vto = 1; G.vtoT = 3; }
+  } else if (G.vto === 1) {
+    G.vtoT -= dt;
+    if (p.throttle < 0.3) { G.vto = 0; return; } // held
+    ui.setAlert(`Launch in ${Math.max(1, Math.ceil(G.vtoT))}`, true);
+    if (Math.random() < dt * 30) smoke(1, G.vtoT < 1.2);
+    G.shakeT = Math.max(G.shakeT, G.vtoT < 1.2 ? 0.12 : 0);
+    if (G.vtoT <= 0) { G.vto = 2; G.shakeT = 0.7; thud(0.9, 1.4); ui.flash(); }
+  } else {
+    const agl = p.alt - pad - tall;
+    p.vz = Math.max(agl > 0.1 ? -6 : 0, Math.min(22, p.vz + (p.throttle > 0.3 ? 8 * p.throttle : -9) * dt));
+    p.alt = Math.max(pad + tall, p.alt + p.vz * dt);
+    if (Math.random() < dt * 40) smoke(agl < 14 ? 2 : 1, true);
+    G.shakeT = Math.max(G.shakeT, agl < 20 ? 0.1 : 0);
+    if (agl > 26) { // lean over and pick up forward speed
+      p.pitchV = lerp(p.pitchV, 0.4, Math.min(1, dt * 1.6));
+      p.speed += (st.speed * 0.9 - p.speed) * Math.min(1, dt * 1.2);
+      p.x += Math.cos(p.heading) * p.speed * dt; p.y += Math.sin(p.heading) * p.speed * dt;
+    }
+    ui.setAlert(agl > 26 ? null : 'Lift-off', true);
+    if (agl > 46) { G.mode = 'flying'; G.lastLvl = here; G.vto = 0; p.pitchV = undefined; p.lean = 0.8; p.vz = Math.min(p.vz, st.climb); ui.setAlert(null); }
+  }
+}
+
 function updateTakeoff(dt) {
+  if (G.stats.orbit) { updateLaunch(dt); return; }
   const p = G.plane, st = G.stats;
   p.throttle = input.throttle;
   p.propSpin = 1;
@@ -836,7 +878,7 @@ function updateSurface(dt) {
   const atGoal = af >= 0 && !G.mission.free && w.id === t.world && af === t.index && (!G.mission.transit || G.transited);
   if (atGoal && p.speed < 0.6 && p.throttle < 0.12) { G.landing = { res: 'airfield', af, hard: false }; resolveLanding(); return; }
   if (G.ac.fuel <= 0) { makeCamp(wetHere); return; }
-  if (input.pitch > 0.3) { G.takeoffFrom = { x: p.x, y: p.y }; G.blockN = 0; G.mode = 'takeoff'; return; } // pull up: start a take-off run from here
+  if (input.pitch > 0.3) { G.takeoffFrom = { x: p.x, y: p.y }; G.blockN = 0; G.vto = 0; G.mode = 'takeoff'; return; } // pull up: start a take-off run from here
   ui.setAlert(blocked ? 'Blocked' : atGoal ? 'Arrived. Close the throttle' : `${wetHere ? 'Sailing' : A.surf.land === 'climb' ? 'Walking' : 'Taxiing'}. Pull up to fly, STOP to camp`, true);
 }
 
@@ -1050,6 +1092,7 @@ function frame(now, once) {
     tTilt = clamp(tTilt - 0.14 * pf, 0.24, 0.82); skyH = clamp(skyH + 0.16 * pf, 0.1, 0.62);
     if (pf > 0) tSky = Math.min(1, tSky + pf * 1.6);
   }
+  if (G.mode === 'takeoff' && G.stats.orbit) { tTilt = 0.24; G.ay = lerp(G.ay, 0.52, kk); } // a launch is watched from low down, the whole ship in view
   V.tilt = lerp(V.tilt, tTilt, kk); V.elev = lerp(V.elev, tElev, kk);
   G.sky = lerp(G.sky, Math.max(tSky, dark), kk);
   const cockpit = G.view === 2 && (G.mode === 'takeoff' || G.mode === 'flying' || G.mode === 'rollout');
@@ -1060,7 +1103,7 @@ function frame(now, once) {
   const fx = onFoot && who ? who.x : p.x, fy = onFoot && who ? who.y : p.y, fz = onFoot && who ? who.z + vw.eye : p.alt;
   setCamera(fx, fy, fz, G.camRot, G.zoom, G.ax + ((Math.random() - 0.5) * shake) / V.W, G.ay + ((Math.random() - 0.5) * shake) / V.H);
   drawScene(ctx, {
-    cockpit, eye: onFoot && G.foot.view === 1 && who ? { x: who.x, y: who.y, z: who.z, rot: who.rot } : null,
+    craft: G.craft || 'sparrow', cockpit, eye: onFoot && G.foot.view === 1 && who ? { x: who.x, y: who.y, z: who.z, rot: who.rot } : null,
     time: G.time, frame: G.frame, plane: p, model: G.model, scenery: G.scenery, puffs: G.puffs,
     inStorm: G.mode === 'flying' && (G.inCell || G.underCell), showPlane: !cockpit, wrecked: G.wrecked, budget: G.frame < G.boost ? 40 : 3,
     sky: G.sky, skyH, dark, speedFrac: airborne ? frac : 0,
