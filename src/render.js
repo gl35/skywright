@@ -373,7 +373,7 @@ export function drawScene(ctx, scene) {
     const set = setOf(c);
     drawShadow(ctx, set[c.variant % set.length], c.wx + 6, c.wy + 4, 0, c.rot, c.vs / 2, c.storm ? 0.3 : 0.16);
   }
-  if (scene.showPlane) {
+  if (scene.showPlane && !scene.wrecked) {
     const ground = levelAt(pl.x, pl.y) * HZ;
     drawShadow(ctx, model.rolls[ROLL_STEPS], pl.x + (pl.alt - ground) * 0.25, pl.y + (pl.alt - ground) * 0.15, ground, pl.heading, model.vs, 0.3);
   }
@@ -406,7 +406,7 @@ export function drawScene(ctx, scene) {
     const drawWho = () => { drawStack(ctx, scenery.pilot[who.pose], who.x, who.y, who.z + scenery.pilot[0].cz * 0.34, who.rot, 0.34); ctx.setTransform(1, 0, 0, 1, 0, 0); };
     const inFront = who && (who.onTop || V.s * (who.x - pl.x) + V.c * (who.y - pl.y) > 0);
     if (who && !inFront) drawWho();
-    drawPlane(ctx, pl, model, time);
+    if (!scene.wrecked) drawPlane(ctx, pl, model, time); // blown to pieces: only the fire and the bits are left
     if (who && inFront) drawWho();
     if (scene.fx && scene.fx.length) drawFx(ctx, scene.fx, false);
     for (const c of cloudList) if (c.alt > pl.alt) drawCloud(c, true);

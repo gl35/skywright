@@ -98,6 +98,7 @@ function park() {
   const st = world().stops[G.mission.from];
   Object.assign(G.plane, { x: st.x - 2, y: st.y, heading: 0, speed: 0, vz: 0, roll: 0, lean: 0, throttle: 0, propSpin: 0, alt: 2 * HZ + G.belly });
   clearTrails();
+  G.wrecked = false; G.wreck = null; G.skid = 0;
 }
 // The landing ground the nav arrow points at, or null while still climbing out for a transit burn.
 const destStop = () => (!G.mission.transit || G.transited ? G.target.stop : null);
@@ -149,12 +150,13 @@ function enterHangar() {
 function towBack(kind) {
   const s = G.save;
   const fee = Math.min(s.money, 60 + Math.round(s.money * 0.25));
-  const dmg = kind === 'crash' ? 35 : kind === 'ditch' ? 22 : 0;
+  const dmg = kind === 'crash' ? 100 : kind === 'ditch' ? 22 : 0;
   s.money -= fee;
-  if (dmg) for (const k of PART_KEYS) G.ac.cond[k] = Math.max(5, G.ac.cond[k] - dmg);
+  if (kind === 'crash') for (const k of PART_KEYS) G.ac.cond[k] = Math.min(G.ac.cond[k], 20); // what is left of her needs rebuilding
+  else if (dmg) for (const k of PART_KEYS) G.ac.cond[k] = Math.max(5, G.ac.cond[k] - dmg);
   const home = WORLDS[G.mission.world].stops[G.mission.from].name;
-  const title = kind === 'crash' ? 'Crashed' : kind === 'ditch' ? 'Ditched' : 'Stranded';
-  showCards([{ title, body: [`Towed back to ${home}: <b>-$${fee}</b>.${dmg ? ' Every part damaged.' : ''}`], btn: 'Workshop' }], enterHangar);
+  const title = kind === 'crash' ? 'Wrecked' : kind === 'ditch' ? 'Ditched' : 'Stranded';
+  showCards([{ title, body: [`Towed back to ${home}: <b>-$${fee}</b>.${kind === 'crash' ? ' The aircraft is a wreck.' : dmg ? ' Every part damaged.' : ''}`], btn: 'Workshop' }], enterHangar);
 }
 
 const actions = {
@@ -274,7 +276,8 @@ const actions = {
       planExtras();
     }
     p.speed = 0; p.vz = 0; p.roll = 0;
-    G.takeoffFrom = { x: p.x, y: p.y };
+    if (G.mode !== 'hangar') p.heading = clearestHeading(p); // out in the open: turn her to face the lowest ground
+    G.takeoffFrom = { x: p.x, y: p.y }; G.blockN = 0;
     input.throttle = 0.85;
     G.mode = 'takeoff';
     persist();
@@ -303,7 +306,7 @@ function burst(n, x, y, z, o) { // n particles flung outward from a point
   for (let i = 0; i < n; i++) {
     const a = Math.random() * 6.283, v = rnd(o.v0, o.v1);
     G.fx.push({ kind: 'dot', x, y, z, vx: Math.cos(a) * v, vy: Math.sin(a) * v, vz: rnd(o.up0 || 0, o.up1 || 0), g: o.g || 0, age: 0, life: rnd(o.life * 0.7, o.life * 1.2),
-      size: o.size || 2, col: Array.isArray(o.col) ? o.col[i % o.col.length] : o.col, grow: o.grow, alpha: o.alpha, under: o.under });
+      size: o.size || 2, col: Array.isArray(o.col) ? o.col[i % o.col.length] : o.col, grow: o.grow, alpha: o.alpha, under: o.under, floor: o.floor || 0 });
   }
 }
 const ring = (x, y, size, life = 1.4) => G.fx.push({ kind: 'ring', x, y, z: 0.05, vx: 0, vy: 0, vz: 0, age: 0, life, size, under: true });
@@ -312,10 +315,28 @@ function splash(x, y, big) {
   ring(x, y, big ? 14 : 8); ring(x, y, big ? 9 : 5, 1);
 }
 const dust = (x, y, z, n = 18) => burst(n, x, y, z, { v0: 1.5, v1: 5, up0: 0.5, up1: 2, life: 0.9, col: '205,185,145', size: 2, grow: 2, alpha: 0.6 });
-function explode(x, y, z) {
-  burst(36, x, y, z, { v0: 3, v1: 12, up0: 3, up1: 12, g: 13, life: 0.9, col: ['255,236,150', '255,160,60', '255,96,40'], size: 2 });
+function explode(x, y, z, floor = 0) {
+  burst(36, x, y, z, { v0: 3, v1: 12, up0: 3, up1: 12, g: 13, life: 0.9, col: ['255,236,150', '255,160,60', '255,96,40'], size: 2, floor });
   burst(16, x, y, z, { v0: 0.5, v1: 3, up0: 2, up1: 5, life: 1.9, col: '40,40,46', size: 3, grow: 2.5, alpha: 0.7 });
-  burst(10, x, y, z, { v0: 3, v1: 8, up0: 5, up1: 11, g: 15, life: 1.2, col: '60,50,46', size: 2 });
+  burst(10, x, y, z, { v0: 3, v1: 8, up0: 5, up1: 11, g: 15, life: 1.2, col: '60,50,46', size: 2, floor });
+}
+// The aircraft goes up: a fireball, a ball of smoke, and pieces of it thrown wide. After this there is only wreckage.
+function blowUp(x, y, z, floor) {
+  G.wrecked = true;
+  burst(70, x, y, z, { v0: 2, v1: 17, up0: 2, up1: 17, g: 12, life: 1.1, col: ['255,250,210', '255,226,120', '255,160,60', '255,96,40'], size: 6, grow: 1.2, floor });
+  burst(26, x, y, z + 1, { v0: 0.5, v1: 5, up0: 3, up1: 9, life: 2.6, col: ['30,30,34', '58,54,54'], size: 8, grow: 2.2, alpha: 0.75 });
+  burst(30, x, y, z, { v0: 4, v1: 15, up0: 6, up1: 17, g: 17, life: 2.6, col: ['70,72,80', '150,64,44', '208,196,166', '36,36,40'], size: 4, floor }); // pieces of airframe
+  G.wreck = [];
+  for (let i = 0; i < 4; i++) G.wreck.push({ x: x + rnd(-7, 7), y: y + rnd(-7, 7), z: floor }); // where the big pieces come down and burn
+  G.shakeT = 1; ui.flash(); thud(1, 1.5);
+}
+// Flames and a column of smoke from the wreckage.
+function burnWreck(dt) {
+  const p = G.plane, sites = [{ x: p.x, y: p.y, z: p.alt - G.belly, big: true }].concat(G.wreck || []);
+  for (const w of sites) {
+    if (Math.random() < dt * (w.big ? 30 : 9)) burst(1, w.x + rnd(-1.5, 1.5), w.y + rnd(-1.5, 1.5), w.z + 0.3, { v0: 0, v1: 0.8, up0: 3, up1: w.big ? 8 : 5, life: 0.55, col: Math.random() < 0.5 ? '255,214,110' : '255,130,50', size: w.big ? 6 : 3, grow: 0.8 });
+    if (Math.random() < dt * (w.big ? 12 : 3)) burst(1, w.x + rnd(-1, 1), w.y + rnd(-1, 1), w.z + 2, { v0: 0.2, v1: 1.2, up0: 4, up1: 7, life: 2.4, col: '34,34,38', size: w.big ? 7 : 4, grow: 2, alpha: 0.6 });
+  }
 }
 // Called every frame: move the particles on, and lay a wake behind anything moving on (or just above) water.
 function updateFx(dt) {
@@ -324,10 +345,9 @@ function updateFx(dt) {
     f.age += dt;
     if (f.age >= f.life) { G.fx.splice(i, 1); continue; }
     f.x += f.vx * dt; f.y += f.vy * dt; f.z += f.vz * dt;
-    if (f.g) { f.vz -= f.g * dt; if (f.z < 0) { f.z = 0; f.vz = 0; f.vx *= 0.5; f.vy *= 0.5; } }
+    if (f.g) { f.vz -= f.g * dt; const fl = f.floor || 0; if (f.z < fl) { f.z = fl; f.vz = 0; f.vx *= 0.5; f.vy *= 0.5; } }
   }
   G.shakeT = Math.max(0, G.shakeT - dt);
-  G.bounce = Math.max(0, G.bounce - dt * 1.4);
   if (!G.model || G.mode === 'title' || G.fx.length > 400) return;
   const p = G.plane, lvl = levelAt(p.x, p.y);
   if (lvl !== 0 || !world().water) return;
@@ -485,6 +505,24 @@ function breakDown(k) {
   setTimeout(() => beep(180, 0.4, 'sawtooth', 0.2), 200);
 }
 
+// The direction with the lowest ground ahead, so a take-off from a hillside runs downhill and not into the slope.
+// Staying close to the way she already faces wins a tie.
+function clearestHeading(p) {
+  let best = p.heading, bestScore = 1e9;
+  for (let i = 0; i < 16; i++) {
+    const a = p.heading + (i * Math.PI) / 8;
+    let top = 0;
+    for (let d = 6; d <= 90; d += 6) {
+      const l = levelAt(p.x + Math.cos(a) * d, p.y + Math.sin(a) * d);
+      top = Math.max(top, l - d / 45); // nearer ground matters more
+      if (l === 0 && d <= 36 && world().water && !G.stats.floats) top = Math.max(top, 5); // wheels do not run on water
+    }
+    const score = top + Math.abs(angDiff(a, p.heading)) * 0.15;
+    if (score < bestScore) { bestScore = score; best = a; }
+  }
+  return best;
+}
+
 // ---------- flight ----------
 // The take-off run. The machine gathers speed along the strip by itself, but it stays on the
 // ground until the pilot pulls up. An airship just needs the pull: it rises from a standstill.
@@ -495,17 +533,19 @@ function updateTakeoff(dt) {
   const here = levelAt(p.x, p.y), floor = here * HZ + G.belly;
   const onGround = p.alt <= floor + 0.01;
   p.speed = Math.min(st.speed * 0.6, p.speed + st.speed * 0.32 * p.throttle * dt);
+  if (p.alt <= levelAt(p.x, p.y) * HZ + G.belly + 0.01) p.heading += input.turn * 0.9 * dt; // steer the run, so you can point her at open ground
   const nx = p.x + Math.cos(p.heading) * p.speed * dt, ny = p.y + Math.sin(p.heading) * p.speed * dt;
   // The run can bump over gentle ground, but not up a bank, and not into the sea unless she floats.
   const to = levelAt(nx, ny), sea = to === 0 && world().water;
   if (onGround && to !== here && (to > here + 1 || (sea && !st.floats) || (here === 0 && world().water && !AIRCRAFT[G.craft].surf.land))) {
     p.heading += Math.PI; // no room that way: swing round and run back the other way
     p.speed = 0;
+    G.blockN = (G.blockN || 0) + 1; // on a hillside there may be no room either way: then she may jump off from a short run
     beep(160, 0.2, 'sawtooth');
     return;
   }
   p.x = nx; p.y = ny;
-  const ready = st.hover || p.speed > st.speed * 0.4;
+  const ready = st.hover || p.speed > st.speed * 0.4 || (G.blockN > 0 && p.speed > st.speed * 0.08);
   const pull = ready && input.pitch > 0.15;
   if (pull) p.vz = lerp(p.vz, 3.5 * Math.max(0.5, input.pitch), Math.min(1, dt * 3));
   else p.vz = onGround ? 0 : lerp(p.vz, -1.5, Math.min(1, dt * 2));
@@ -513,8 +553,8 @@ function updateTakeoff(dt) {
   p.lean = lerp(p.lean, p.alt > floor ? 0.5 : 0, Math.min(1, dt * 3));
   const up = settings.realStick ? (isTouch ? 'drag down' : 'S') : isTouch ? 'drag up' : 'W';
   if (p.throttle < 0.3 && !st.hover) ui.setAlert('Open the throttle', true);
-  else if (!ready) ui.setAlert('Gathering speed', true);
-  else if (onGround) ui.setAlert(`Pull up: ${up}`, true);
+  else if (!ready) ui.setAlert(airfieldAt(p.x, p.y) >= 0 ? 'Gathering speed' : `Gathering speed. ${isTouch ? 'Drag' : 'A / D'} to steer`, true);
+  else if (onGround) ui.setAlert(`${G.blockN > 0 ? 'No room. ' : ''}Pull up: ${up}`, true);
   else ui.setAlert(null);
   if (p.alt > floor + 4) { G.mode = 'flying'; G.lastLvl = here; ui.setAlert(null); }
 }
@@ -681,17 +721,20 @@ function touchdown(lvl, was) {
   else if (wet) res = st.floats ? 'water' : 'ditch';
   else if (intoHill) res = 'crash';
   else res = 'field';
+  const smash = fast && p.vz < -2.4 && !st.hover; // flown into the ground at speed
+  if (smash) res = res === 'water' ? 'ditch' : res === 'ditch' ? res : 'crash';
   G.landing = { res, af, hard };
-  G.timer = 0;
+  G.timer = 0; G.wrecked = false; G.wreck = null; G.boomed = 0; G.skid = 0;
   G.campNote = '';
   ui.closeFix(); ui.setAlert(null); ui.setHint(null);
   if (res === 'ditch' || res === 'crash') {
     G.mode = 'down';
     thud(0.9, 1.1); ui.flash();
     G.shakeT = 0.7;
-    if (res === 'ditch') splash(p.x, p.y, true); else explode(p.x, p.y, p.alt);
+    if (res === 'ditch') splash(p.x, p.y, true); else explode(p.x, p.y, p.alt, lvl * HZ);
   } else {
-    let dmg = hard ? 10 : 0;
+    let dmg = hard ? 18 : 0;
+    if (hard) c.engine = Math.max(0, c.engine - 8); // the propeller and the mountings take it too
     if (res === 'field' && !st.hover) {
       const onFloats = !A.surf.land; // a seaplane put down on dry land slides in on its floats
       dmg += 3 + (rough ? 10 : 0) + (onFloats ? 14 : 0) + (fast ? 6 : 0);
@@ -705,6 +748,7 @@ function touchdown(lvl, was) {
     if (res === 'water') splash(p.x, p.y, hard);
     else dust(p.x, p.y, p.alt - G.belly, hard || rough ? 26 : 7);
     if (hard || rough) { G.shakeT = 0.35; G.bounce = 1; } // a hard arrival: she bounces
+    if ((hard || rough) && res !== 'water') G.skid = Math.random() < 0.5 ? -1 : 1; // and comes down on one wing, skidding
   }
 }
 
@@ -712,12 +756,20 @@ function updateRollout(dt) {
   const p = G.plane, st = G.stats;
   p.speed = Math.max(0, p.speed - st.speed * 0.45 * dt);
   p.throttle = 0; p.vz = 0;
-  p.roll *= 1 - Math.min(1, dt * 6);
+  if (G.skid) {
+    const k = Math.min(1, p.speed / (st.speed * 0.3)), ch = Math.cos(p.heading), sh = Math.sin(p.heading), tip = G.model.tips * G.model.vs * 0.8 * G.skid;
+    p.roll = lerp(p.roll, 0.42 * G.skid, Math.min(1, dt * 7));
+    p.heading += G.skid * 0.9 * k * dt; // the dragging wing slews her round
+    const gz = levelAt(p.x, p.y) * HZ, tx = p.x - sh * tip, ty = p.y + ch * tip;
+    if (p.speed > 1 && Math.random() < dt * 60) burst(2, tx, ty, gz + 0.3, { v0: 1, v1: 6, up0: 1, up1: 5, g: 16, life: 0.4, col: ['255,244,190', '255,190,80'], size: 1.5, floor: gz });
+    if (Math.random() < dt * 10) burst(1, p.x, p.y, gz + 1, { v0: 0, v1: 1, up0: 2, up1: 4, life: 1.4, col: '52,50,52', size: 3, grow: 2, alpha: 0.55 });
+  } else p.roll *= 1 - Math.min(1, dt * 6);
   p.lean *= 1 - Math.min(1, dt * 6);
   p.propSpin = Math.max(0.05, p.speed / st.speed);
   const nx = p.x + Math.cos(p.heading) * p.speed * dt, ny = p.y + Math.sin(p.heading) * p.speed * dt;
   const here = levelAt(p.x, p.y);
   if (levelAt(nx, ny) === here) { p.x = nx; p.y = ny; } else p.speed = 0; // stop at the edge of the flat ground
+  G.bounce = Math.max(0, G.bounce - dt * 1.4);
   const hop = G.bounce > 0 ? Math.abs(Math.sin(G.bounce * 9)) * 1.6 * G.bounce : 0;
   if (hop < 0.05 && G.bounce > 0.1 && G.bounce < 0.95 && Math.random() < dt * 8) { if (here === 0 && world().water) splash(p.x, p.y, false); else dust(p.x, p.y, here * HZ, 6); } // each time she comes back down
   p.alt = here * HZ + G.belly + hop;
@@ -784,7 +836,7 @@ function updateSurface(dt) {
   const atGoal = af >= 0 && !G.mission.free && w.id === t.world && af === t.index && (!G.mission.transit || G.transited);
   if (atGoal && p.speed < 0.6 && p.throttle < 0.12) { G.landing = { res: 'airfield', af, hard: false }; resolveLanding(); return; }
   if (G.ac.fuel <= 0) { makeCamp(wetHere); return; }
-  if (input.pitch > 0.3) { G.takeoffFrom = { x: p.x, y: p.y }; G.mode = 'takeoff'; return; } // pull up: start a take-off run from here
+  if (input.pitch > 0.3) { G.takeoffFrom = { x: p.x, y: p.y }; G.blockN = 0; G.mode = 'takeoff'; return; } // pull up: start a take-off run from here
   ui.setAlert(blocked ? 'Blocked' : atGoal ? 'Arrived. Close the throttle' : `${wetHere ? 'Sailing' : A.surf.land === 'climb' ? 'Walking' : 'Taxiing'}. Pull up to fly, STOP to camp`, true);
 }
 
@@ -931,9 +983,13 @@ function tick(dt) {
       const k = Math.max(0, 1 - G.timer / 1.5);
       p.heading += dt * 9 * k; p.roll = Math.sin(G.timer * 14) * 0.7 * k; p.speed *= 1 - Math.min(1, dt * 4);
       p.x += Math.cos(p.heading) * p.speed * dt * 0.3; p.y += Math.sin(p.heading) * p.speed * dt * 0.3;
-      if (Math.random() < dt * 14) burst(1, p.x + rnd(-2, 2), p.y + rnd(-2, 2), p.alt, { v0: 0, v1: 1, up0: 2, up1: 5, life: 1.3, col: Math.random() < 0.4 ? '255,150,50' : '40,40,46', size: 3, grow: 2, alpha: 0.7 });
+      const gz = p.alt - G.belly;
+      if (!G.boomed && G.timer > 0.4) { G.boomed = 1; blowUp(p.x, p.y, p.alt, gz); } // the tanks go
+      if (G.boomed === 1 && G.timer > 1.5) { G.boomed = 2; explode(p.x + rnd(-3, 3), p.y + rnd(-3, 3), p.alt, gz); thud(0.7, 0.8); G.shakeT = 0.4; } // and something else after
+      if (G.boomed) burnWreck(dt);
+      else if (Math.random() < dt * 14) burst(1, p.x + rnd(-2, 2), p.y + rnd(-2, 2), p.alt, { v0: 0, v1: 1, up0: 2, up1: 5, life: 1.3, col: Math.random() < 0.4 ? '255,150,50' : '40,40,46', size: 3, grow: 2, alpha: 0.7 });
     }
-    if (G.timer > 2.3) resolveLanding();
+    if (G.timer > (ditch ? 2.3 : 3.6)) resolveLanding();
   }
   ui.updateFix(dt);
 }
@@ -968,6 +1024,7 @@ function frame(now, once) {
     G.camRot += angDiff(northUp ? 0 : -p.heading - Math.PI / 2, G.camRot) * Math.min(1, dt * 3);
     tz = (p.alt < 60 ? lerp(3.5, 1.9, Math.min(1, p.alt / 45)) : lerp(2.0, 1.25, clamp((p.alt - 60) / 160, 0, 1))) * vw.zm * ZK;
     tz *= 1.06 - 0.14 * Math.min(1, frac); // pull back as speed builds
+    if (G.mode === 'down' || (G.mode === 'rollout' && G.skid)) tz *= 1.5; // close in on a crash or a skid
     tax = 0.5; tay = G.mode === 'title' ? 0.78 : vw.ay + (G.view === 2 ? 0 : 0.07 * Math.min(1, frac)); // and look further ahead
     if (northUp && G.mode !== 'title') { // keep the aircraft towards the back of the screen so most of the view is what lies ahead
       const lead = 0.2 + 0.08 * Math.min(1, frac);
@@ -1004,7 +1061,7 @@ function frame(now, once) {
   setCamera(fx, fy, fz, G.camRot, G.zoom, G.ax + ((Math.random() - 0.5) * shake) / V.W, G.ay + ((Math.random() - 0.5) * shake) / V.H);
   drawScene(cockpit ? cockpitCtx : ctx, {
     time: G.time, frame: G.frame, plane: p, model: G.model, scenery: G.scenery, puffs: G.puffs,
-    inStorm: G.mode === 'flying' && (G.inCell || G.underCell), showPlane: !cockpit, budget: G.frame < G.boost ? 40 : 3,
+    inStorm: G.mode === 'flying' && (G.inCell || G.underCell), showPlane: !cockpit, wrecked: G.wrecked, budget: G.frame < G.boost ? 40 : 3,
     sky: G.sky, skyH, dark, speedFrac: airborne ? frac : 0,
     marks: inFlight ? marksNear(p) : null, pilot: who && !who.hidden ? who : null, fx: G.fx,
   });
