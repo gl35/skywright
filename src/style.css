@@ -4,7 +4,7 @@ html, body {
   font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; color: #f4f1e6;
   user-select: none; -webkit-user-select: none; touch-action: none; overscroll-behavior: none;
 }
-#game { position: fixed; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; image-rendering: crisp-edges; touch-action: none; }
+#game { position: fixed; inset: 0; width: 100%; height: 100%;  touch-action: none; }
 .hidden { display: none !important; }
 button { font: inherit; color: inherit; cursor: pointer; }
 

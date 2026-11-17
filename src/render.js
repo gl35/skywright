@@ -62,6 +62,7 @@ const bb = { x0: 0, y0: 0, x1: 0, y1: 0 };
 const Q = [0, 0];
 const CORNERS = [[0, 0], [1, 0], [0, 1], [1, 1]];
 function drawTerrain(ctx, frame, time) {
+  ctx.imageSmoothingEnabled = true; // the ground is painted soft; the machines on it stay crisp
   const zs = V.zoom * V.elev;
   const up = 12 * HZ * zs; // tall ground below the screen edge can still poke into view
   bb.x0 = bb.y0 = 1e9; bb.x1 = bb.y1 = -1e9;
@@ -107,6 +108,7 @@ function drawTerrain(ctx, frame, time) {
     if (k === 0 && world().water) drawGlints(ctx, time);
   }
   ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.imageSmoothingEnabled = false;
 }
 
 // Little flecks of light on the water. They give a sense of speed over open sea.
@@ -322,6 +324,7 @@ const cloudList = [], beasts = [];
 const far = (c) => V.s * (c.wx - V.camx) + V.c * (c.wy - V.camy); // depth down the screen
 const SLOTS = [[6, -18], [-10, -14]]; // where a stop's two buildings stand, relative to the landing ground
 
+let lightKey = '', sun = null, vig = null;
 // scene: { time, frame, plane, model, scenery, puffs, inStorm, showPlane, sky, skyH, dark, speedFrac }
 export function drawScene(ctx, scene) {
   const { time, frame, plane: pl, model, scenery } = scene;
@@ -430,6 +433,18 @@ export function drawScene(ctx, scene) {
       }
     }
   }
+
+  // light: warm from the top left, cool in the opposite corner, and the edges of the picture a little darker
+  if (!lightKey || lightKey !== V.W + 'x' + V.H) {
+    lightKey = V.W + 'x' + V.H;
+    sun = ctx.createLinearGradient(0, 0, V.W, V.H);
+    sun.addColorStop(0, 'rgba(255,236,186,0.16)'); sun.addColorStop(0.5, 'rgba(255,236,186,0)'); sun.addColorStop(1, 'rgba(16,28,74,0.16)');
+    const R = Math.hypot(V.W, V.H) / 2;
+    vig = ctx.createRadialGradient(V.W / 2, V.H / 2, R * 0.55, V.W / 2, V.H / 2, R);
+    vig.addColorStop(0, 'rgba(6,10,30,0)'); vig.addColorStop(1, 'rgba(6,10,30,0.34)');
+  }
+  ctx.fillStyle = sun; ctx.fillRect(0, 0, V.W, V.H);
+  ctx.fillStyle = vig; ctx.fillRect(0, 0, V.W, V.H);
 
   if (scene.inStorm) { // rain, or blowing dust
     const dusty = w.id === 'mars';

@@ -130,6 +130,7 @@ function genChunk(cx, cy) {
       }
     for (let k = 0; k < 4; k++) for (let c = 0; c < 3; c++) water[k * 3 + c] = lerp(mA.pal.water[k][c], mB.pal.water[k][c], mT);
     const trees = (mT < 0.5 ? mA : mB).trees;
+    const hsX = lerp(mA.hs, mB.hs, mT);
 
     for (let iy = 0; iy < TS; iy++) {
       const y = y0 + (1 + iy) * CELL;
@@ -139,17 +140,32 @@ function genChunk(cx, cy) {
       let r, g, b, steel = false;
       for (let s = 0; s < near.length; s++) if (near[s].carrier && onDeck(x - near[s].x, y - near[s].y)) steel = true;
       if (L === 0) {
-        const depth = -vv[i] + (h - 0.5) * 0.006;
+        const depth = -vv[i] + (h - 0.5) * 0.004;
         const shore = lv[i - 1] || lv[i + 1] || lv[i - N] || lv[i + N];
-        const w = shore ? 3 : depth < 0.03 ? 2 : depth < 0.075 ? 1 : 0;
-        const f = cur.water ? 1 : 0.94 + 0.12 * h; // dry basins get a little grain
-        r = water[w * 3] * f; g = water[w * 3 + 1] * f; b = water[w * 3 + 2] * f;
+        const u = Math.min(1, Math.max(0, depth / 0.1));
+        // 2 = shallow, 1 = mid, 0 = deep: blend between them instead of stepping
+        const wa = u < 0.35 ? 2 : 1, wb = u < 0.35 ? 1 : 0, t = u < 0.35 ? u / 0.35 : (u - 0.35) / 0.65;
+        r = lerp(water[wa * 3], water[wb * 3], t); g = lerp(water[wa * 3 + 1], water[wb * 3 + 1], t); b = lerp(water[wa * 3 + 2], water[wb * 3 + 2], t);
+        const iy2 = iy + 1, ix2 = ix + 1; // a second, fainter band two cells out from the land
+        const near2 = !shore && ((ix2 > 1 && lv[i - 2]) || (ix2 < N - 2 && lv[i + 2]) || (iy2 > 1 && lv[i - 2 * N]) || (iy2 < N - 2 && lv[i + 2 * N]) || lv[i - N - 1] || lv[i - N + 1] || lv[i + N - 1] || lv[i + N + 1]);
+        const pale = shore ? 1 : near2 ? 0.45 : 0;
+        if (pale) { r = lerp(r, water[9], pale); g = lerp(g, water[10], pale); b = lerp(b, water[11], pale); }
+        const f = cur.water ? 0.97 + 0.06 * vnoise(x / 16, y / 6, 3) : 0.94 + 0.12 * h; // a slow swell; dry basins get a little grain
+        r *= f; g *= f; b *= f;
       } else {
-        let f = 0.95 + 0.1 * h;
+        let f = 0.96 + 0.08 * h;
         if (lv[i - 1] > L || lv[i - N] > L) f *= 0.8; // in the shade of higher ground
-        else if (lv[i + 1] < L || lv[i + N] < L) f *= 1.07; // sunlit edge
-        if (trees && (L === 4 || L === 5) && h > 0.7) f *= 0.76;
-        r = land[L * 3] * f; g = land[L * 3 + 1] * f; b = land[L * 3 + 2] * f;
+        else if (lv[i + 1] < L || lv[i + N] < L) f *= 1.08; // sunlit edge
+        const slope = (vv[i + 1] - vv[i - 1] + vv[i + N] - vv[i - N]) * hsX; // rising toward the south-east: facing the light
+        f *= Math.min(1.22, Math.max(0.8, 1 + slope * 0.24));
+        f *= 0.93 + 0.14 * vnoise(x / 11, y / 11, cur.seed + 5); // patches of lighter and darker ground
+        const up = Math.min(NL - 1, L + 1), t = Math.min(1, Math.max(0, vv[i] * hsX - (L - 1))) * 0.4;
+        r = lerp(land[L * 3], land[up * 3], t) * f; g = lerp(land[L * 3 + 1], land[up * 3 + 1], t) * f; b = lerp(land[L * 3 + 2], land[up * 3 + 2], t) * f;
+        if (trees && L >= 3 && L <= 5 && vnoise(x / 8 + 3.3, y / 8 - 8.1, cur.seed + 11) > 0.5) { // a wood: dark crowns with lit tops
+          const crown = hash2((gx0 + 1 + ix) >> 1, (gy0 + 1 + iy) >> 1, 9);
+          const k = crown > 0.72 ? 0.98 : crown > 0.35 ? 0.72 : 0.58;
+          r *= k * 0.8; g *= k; b *= k * 0.78;
+        }
         if (steel) { r = g = 96 * f; b = 104 * f; }
         if (L === 2) {
           for (let s = 0; s < near.length; s++) { // paint the landing ground
@@ -187,6 +203,14 @@ function genChunk(cx, cy) {
       }
     }
   }
+  // Spread each tile's edge into the gutter round it, so drawing the tiles smoothly never pulls in empty pixels.
+  const cp = (sx, sy, dx, dy) => { const a = (sy * W + sx) * 4, b2 = (dy * W + dx) * 4; D[b2] = D[a]; D[b2 + 1] = D[a + 1]; D[b2 + 2] = D[a + 2]; D[b2 + 3] = D[a + 3]; };
+  for (let k = 0; k <= maxL; k++)
+    for (let band = 0; band < 2; band++) {
+      const ox = k * TP + 1, oy = band * TP + 1;
+      for (let j = 0; j < TS; j++) { cp(ox, oy + j, ox - 1, oy + j); cp(ox + TS - 1, oy + j, ox + TS, oy + j); }
+      for (let j = -1; j <= TS; j++) { cp(ox + j, oy, ox + j, oy - 1); cp(ox + j, oy + TS - 1, ox + j, oy + TS); }
+    }
   ctx.putImageData(img, 0, 0);
   return { cx, cy, canvas, maxL, used: 0, px: 0, py: 0 };
 }
