@@ -156,55 +156,55 @@ export const AIRCRAFT = {
     name: 'Sparrow', kind: 'Vintage biplane trainer', tier: 1, nose: '#c8402f',
     speed: 16, ceil: 20, climb: 5, tank: 70, burn: 0.5, turn: 0.95, wear: 1.25, floats: false,
     start: { engine: 58, frame: 72, fuel: 54, avionics: 66, tank: 0.45 },
-    blurb: "Nan's old biplane. Slow, thirsty and leaky, but she flies.",
+    blurb: "Nan's old biplane. Slow and leaky, but she flies.",
   },
   heron: {
     name: 'Heron', kind: 'Floatplane', tier: 1.3, nose: '#f2f4f5',
     speed: 19, ceil: 26, climb: 5.5, tank: 115, burn: 0.58, turn: 0.9, wear: 1.0, floats: true,
     start: { engine: 74, frame: 60, fuel: 82, avionics: 55, tank: 0.5 },
-    blurb: 'Lands on water. If something breaks over the ocean you can set down and fix it.',
+    blurb: 'Lands on water, so you can stop and fix things at sea.',
   },
   marlin: {
     name: 'Marlin', kind: 'Racing flying boat', tier: 1.5, nose: '#24407a',
     speed: 24, ceil: 24, climb: 6.5, tank: 95, burn: 0.62, turn: 1.15, wear: 1.15, floats: true,
     start: { engine: 64, frame: 70, fuel: 60, avionics: 58, tank: 0.5 },
-    blurb: 'A racer from the old Adriatic seaplane circuit: boat hull, engine on struts above the wing. Quick and nimble, thirsty, and happy on the water.',
+    blurb: 'A racing flying boat. Fast, nimble, thirsty.',
   },
   dragonfly: {
     name: 'Dragonfly', kind: 'Clockwork ornithopter', tier: 1.6, nose: '#c9a24a',
     speed: 21, ceil: 26, climb: 7, tank: 100, burn: 0.42, turn: 1.5, wear: 1.1, floats: false,
     start: { engine: 66, frame: 52, fuel: 78, avionics: 70, tank: 0.6 },
-    blurb: 'Four beating wings of brass and oiled silk. Turns on a coin, which is what a mountain valley asks for.',
+    blurb: 'Four beating wings. Turns on a coin.',
   },
   kestrel: {
     name: 'Kestrel', kind: 'Twin turboprop', tier: 2, nose: '#d2d8dd',
     speed: 25, ceil: 40, climb: 8, tank: 170, burn: 0.8, turn: 0.8, wear: 0.85, floats: false,
     start: { engine: 62, frame: 80, fuel: 70, avionics: 48, tank: 0.5 },
-    blurb: 'Climbs over the high ranges and over most storm tops.',
+    blurb: 'Climbs over mountains and most storms.',
   },
   comet: {
     name: 'Comet', kind: 'Light jet', tier: 2.6, nose: '#f5f7fa',
     speed: 34, ceil: 58, climb: 12, tank: 250, burn: 1.25, turn: 0.7, wear: 0.7, floats: false,
     start: { engine: 78, frame: 70, fuel: 58, avionics: 74, tank: 0.55 },
-    blurb: 'Fast and high. Crosses the long ocean legs with fuel to spare.',
+    blurb: 'Fast, high, long range.',
   },
   meteor: {
     name: 'Meteor', kind: 'Rocket plane', tier: 3.2, nose: '#4f5564',
     speed: 44, ceil: 95, climb: 16, tank: 300, burn: 1.8, turn: 0.6, wear: 0.65, floats: false, space: 1,
     start: { engine: 70, frame: 64, fuel: 72, avionics: 60, tank: 0.6 },
-    blurb: 'Climbs to the edge of space, where the sky goes black and the thin air doubles its speed.',
+    blurb: 'Reaches the edge of space. Twice as fast up there.',
   },
   ark: {
     name: "Tinker's Ark", kind: 'Patchwork airship with a door', tier: 1.8, nose: '#7a4f2e',
     speed: 15, ceil: 30, climb: 3.5, tank: 260, burn: 0.34, turn: 0.6, wear: 0.7, floats: true, hover: true,
     start: { engine: 60, frame: 55, fuel: 68, avionics: 50, tank: 0.7 },
-    blurb: 'A boat hull under a quilt of gas bags. It hovers, settles on land or water, and has a door that does not open onto the deck.',
+    blurb: 'Hovers, lands anywhere, and has a very odd door.',
   },
   starling: {
     name: 'Starling', kind: 'Star raft', tier: 4, nose: '#f4f5f7',
     speed: 40, ceil: 220, climb: 22, tank: 420, burn: 3, turn: 0.55, wear: 0.6, floats: false, space: 5, orbit: true,
     start: { engine: 72, frame: 78, fuel: 66, avionics: 62, tank: 0.8 },
-    blurb: 'Built from a Ming shipwright’s drawing and four dynasties of borrowed ideas. Reaches orbit and beyond. Come down gently or the heat eats the hull.',
+    blurb: 'Reaches orbit and beyond. Come down gently.',
   },
 };
 
@@ -212,30 +212,30 @@ export const AIRCRAFT = {
 // ability: a move on a button, lasting `dur` seconds with `cd` seconds to recover.
 // surf: how it gets about once it is down. water: sails. land 'flat': taxis on level ground. land 'climb': walks over rough ground.
 const EXTRA = {
-  sparrow: { ability: { id: 'loop', name: 'LOOP', dur: 2.2, cd: 8, desc: 'A full loop, like a fairground wheel. Storms cannot touch you during it, and it shakes jammed controls free.' }, surf: { land: 'flat' } },
-  marlin: { ability: { id: 'race', name: 'RACE', dur: 4, cd: 12, desc: 'Full race power: half as fast again for a few seconds, at twice the fuel.' }, surf: { water: true } },
-  heron: { ability: { id: 'lean', name: 'LEAN', dur: 14, cd: 20, desc: 'Lean the mixture: burns a third of the fuel for a while.' }, surf: { water: true } },
-  dragonfly: { ability: { id: 'hover', name: 'HOVER', dur: 6, cd: 5, desc: 'Stops dead in the air and turns on the spot.' }, surf: { land: 'climb' } },
-  kestrel: { ability: { id: 'highclimb', name: 'CLIMB', dur: 7, cd: 18, desc: 'Both engines to the stops: climbs far faster and well above its normal ceiling.' }, surf: { land: 'flat' } },
-  comet: { ability: { id: 'burner', name: 'BURNER', dur: 5, cd: 15, desc: 'Afterburner: much faster, and three times the fuel.' }, surf: { land: 'flat' } },
-  meteor: { ability: { id: 'zoom', name: 'ZOOM', dur: 3, cd: 15, desc: 'Rocket zoom: straight up, very fast.' }, surf: { land: 'flat' } },
-  ark: { ability: { id: 'mend', name: 'MEND', dur: 9, cd: 25, desc: 'All stop. While she hangs still you walk the deck and patch the worst parts back to working order, no kit needed.' }, surf: { water: true, land: 'flat' } },
-  starling: { ability: { id: 'shield', name: 'SHIELD', dur: 8, cd: 20, desc: 'Heat shield: no re-entry heat and no storm damage while it holds.' }, surf: { land: 'flat' } },
+  sparrow: { ability: { id: 'loop', name: 'LOOP', dur: 2.2, cd: 8, desc: 'Dodges storms, frees jammed controls.' }, surf: { land: 'flat' } },
+  marlin: { ability: { id: 'race', name: 'RACE', dur: 4, cd: 12, desc: '+50% speed, double fuel.' }, surf: { water: true } },
+  heron: { ability: { id: 'lean', name: 'LEAN', dur: 14, cd: 20, desc: 'Burns a third of the fuel.' }, surf: { water: true } },
+  dragonfly: { ability: { id: 'hover', name: 'HOVER', dur: 6, cd: 5, desc: 'Stops in mid-air.' }, surf: { land: 'climb' } },
+  kestrel: { ability: { id: 'highclimb', name: 'CLIMB', dur: 7, cd: 18, desc: 'Climbs fast, past its ceiling.' }, surf: { land: 'flat' } },
+  comet: { ability: { id: 'burner', name: 'BURNER', dur: 5, cd: 15, desc: 'Much faster, triple fuel.' }, surf: { land: 'flat' } },
+  meteor: { ability: { id: 'zoom', name: 'ZOOM', dur: 3, cd: 15, desc: 'Straight up, very fast.' }, surf: { land: 'flat' } },
+  ark: { ability: { id: 'mend', name: 'MEND', dur: 9, cd: 25, desc: 'Stops and patches broken parts. No kit needed.' }, surf: { water: true, land: 'flat' } },
+  starling: { ability: { id: 'shield', name: 'SHIELD', dur: 8, cd: 20, desc: 'No heat or storm damage.' }, surf: { land: 'flat' } },
 };
 for (const k of Object.keys(EXTRA)) Object.assign(AIRCRAFT[k], EXTRA[k]);
 export const surfText = (A) => {
-  const w = A.surf.water, l = A.surf.land, wheels = A.hover ? 'paddle wheels' : 'floats';
-  if (w && l) return `On the surface: sails on its ${wheels} and trundles over level ground.`;
-  if (w) return `On the surface: sails on its ${wheels}. Cannot move on land.`;
-  return l === 'climb' ? 'On the surface: walks on its legs, even over rough ground.' : 'On the surface: taxis on level ground.';
+  const w = A.surf.water, l = A.surf.land;
+  if (w && l) return 'Sails and taxis.';
+  if (w) return 'Sails. No wheels.';
+  return l === 'climb' ? 'Walks over rough ground.' : 'Taxis on flat ground.';
 };
 
 // Upgrades are your own skills and tools, so they carry over to every machine you fly.
 export const UPGRADES = {
-  engine: { name: 'Engine tuning', desc: '+8% speed and climb per level' },
-  tank: { name: 'Fuel trimming', desc: '+15% range per level' },
-  frame: { name: 'Bracing and doping', desc: 'All parts wear 15% slower per level' },
-  avionics: { name: 'Instruments', desc: 'Level 1 adds storm radar. Each level cuts breakdowns by 20%' },
+  engine: { name: 'Engine tuning', desc: '+8% speed and climb' },
+  tank: { name: 'Fuel trimming', desc: '+15% range' },
+  frame: { name: 'Bracing and doping', desc: 'Parts wear 15% slower' },
+  avionics: { name: 'Instruments', desc: 'Storm radar. 20% fewer breakdowns' },
 };
 export const UP_COST = [200, 500, 1000];
 export const KIT_COST = 40;
@@ -250,176 +250,126 @@ export const START_SAVE = () => ({
 
 export const INTRO = {
   title: 'The logbook',
-  nan: '"If you are reading this, you have the key. Fly the long way round first. You will need to know how to keep a machine alive before the door will be any use to you."',
-  body: [
-    'Odile Wren, your Nan, flew out of Wrenfield in 1938 to circle the world and came home eleven months later. She never said where she had been. She left you three things: the Sparrow, a logbook with half its pages in a script nobody can read, and a brass key that fits nothing in the house.',
-    'You are a pilot and an engineer, same as she was. The Sparrow’s engine is tired and her fuel lines weep. Fix what you can afford, fill the tank and head east.',
-  ],
+  nan: '"Fly the long way round first. Then try the key."',
+  body: ['Nan circled the world in 1938 and never said where she went. She left you a biplane, a logbook and a brass key.', 'Fix the Sparrow. Head east.'],
 };
 
 // One entry per mission, in order. Each names the machine you must fly.
 // transit: the flight leaves this world (climb high and hold) and ends on another one.
+// Keep every line short: nobody reads a wall of text in a flying game.
 export const MISSIONS = [
   // ---------- Chapter 1: the long way round ----------
   {
     ch: 'Chapter 1 · The Long Way Round', title: 'First light', world: 'earth', from: 0, to: 1, craft: 'sparrow', pay: 420,
-    brief: 'Carry the mail sack to Port Calloway. Something always shakes loose on the first leg, so take a repair kit.',
-    arrive: [
-      'The harbour master, Ines Okafor, signs for the mail and then looks hard at the Sparrow. "I have seen this aeroplane. A woman flew it in before the war and left on a floatplane she rebuilt on my slipway in nine days."',
-      'The floatplane is still here under a tarpaulin. The next two legs are open ocean, and the Sparrow cannot swim. Ines will crate her home if you can get the Heron running.',
-    ],
+    brief: 'Fly the mail to Port Calloway. Pack a repair kit.',
+    arrive: ['"I know this plane," says the harbour master. "A woman flew it in before the war and left on that floatplane."', 'The Heron is yours. Next: open ocean.'],
   },
   {
     title: 'Open water', world: 'earth', from: 1, to: 2, craft: 'heron', pay: 520,
-    brief: 'Nowhere to land between here and Mango Key except the sea itself. The Heron can set down on water, so a breakdown is a pause, not the end.',
-    arrive: [
-      'Mango Key is one runway and a radio shack. The operator, an old man called Tomasi, has a photograph on the wall: your Nan, thirty years younger, holding a wrench beside this same Heron.',
-      'Under a palm-leaf shelter behind the shack sits something faster than the Heron: a racing flying boat called the Marlin, left by a pilot who lost a bet. Take whichever you like, Tomasi says. "She asked everyone the same thing," he adds. "Had we seen a ship in the sky with no engines. We thought the sun had got to her."',
-    ],
+    brief: 'Open sea all the way. The Heron can land on water.',
+    arrive: ['On the radio shack wall: a photo of Nan with this same Heron.', '"She kept asking about a ship in the sky with no engines." There is a racing flying boat here too. Take either.'],
   },
   {
     title: 'Storm alley', world: 'earth', from: 2, to: 3, craft: 'heron', pay: 620, also: ['marlin'],
-    brief: 'Storm cells build fast on the way to Saffron Quay. They chew the airframe and fry the electrics. Go round them or stay underneath.',
-    arrive: [
-      'In the market at Saffron Quay a clockmaker named Farid Haddad takes one look at the unreadable pages in the logbook and goes quiet. "That is not a language. That is a parts list." He can read perhaps one line in ten.',
-      'He has spent twenty years building a flying machine from a drawing a customer once left him as payment. It beats its wings. Nothing with a propeller will get through the passes to Highgate, he says, but this might.',
-    ],
+    brief: 'Storms ahead. Go round them or stay low.',
+    arrive: ['A clockmaker studies Nan’s strange pages. "Not a language. A parts list."', 'He has built a machine that beats its wings. Only it can thread the mountain passes.'],
   },
   {
     title: 'The passes', world: 'earth', from: 3, to: 4, craft: 'dragonfly', pay: 720,
-    brief: 'The peaks before Highgate are higher than the Dragonfly can climb. Follow the valleys. She turns faster than anything else you will fly.',
-    arrive: [
-      'Highgate is a strip cut into a mountainside below a monastery. Nan’s last readable entry is dated here: "Engine finished. Turning back." It is a lie. The abbot shows you why.',
-      'In a cave behind the prayer hall sits the wreck of an airship: a boat hull, a rotten quilt of gas bags, and in the hull a door with a brass lock. "She did not turn back," he says. "She went through. She was gone a season and came out older." The key in your pocket is suddenly heavy. The door is jammed and the ship is in no state to fly. The monks will send it to Wrenfield by rail and sea. It will take months. Finish the lap.',
-    ],
+    brief: 'The peaks are too high to climb. Follow the valleys.',
+    arrive: ['In a cave behind the monastery: a wrecked airship with a brass-locked door.', '"She went through," says the abbot. "She came out older." The monks will ship it home. Finish the lap.'],
   },
   {
     title: 'Over the top', world: 'earth', from: 4, to: 5, craft: 'kestrel', pay: 860,
-    brief: 'A survey crew at Highgate lends you their Kestrel to take north. It climbs above the ranges and above most storm tops. Its instruments are in a sorry state.',
-    arrive: [
-      'Frostholm is a ring of huts on the ice. The station chief, Dr Anneli Voss, studies old magnetic records. She has one from 1938 that makes no sense: a compass needle that swung to point straight up for six minutes.',
-      '"Your grandmother signed the visitors’ book that week," she says. "Under occupation she wrote: carpenter." The station keeps a small jet for the long crossings. You will need it.',
-    ],
+    brief: 'A borrowed Kestrel. Climb over the mountains and the storms.',
+    arrive: ['Frostholm, 1938: a compass needle pointed straight up for six minutes.', 'Nan signed the visitors’ book that week. Occupation: "carpenter."'],
   },
   {
     title: 'The long crossing', world: 'earth', from: 5, to: 6, craft: 'comet', pay: 1000,
-    brief: 'The longest leg of the lap, most of it over water, ending in the storms around Cinder Reach. The Comet has the range if its fuel system holds.',
-    arrive: [
-      'Cinder Reach smells of sulphur. The volcanologists here have a puzzle of their own: a bronze bowl, dredged from the crater lake, with eight dragons round its rim. It is a seismoscope, of a pattern that should be on the other side of the world and eighteen centuries old.',
-      'Stamped inside the rim, small and neat, is a wren.',
-    ],
+    brief: 'The longest leg, mostly ocean. Watch the fuel.',
+    arrive: ['Dredged from the crater lake: a bronze earthquake bowl, eighteen centuries old.', 'Stamped inside the rim: a wren.'],
   },
   {
     title: 'Ash and rain', world: 'earth', from: 6, to: 7, craft: 'comet', pay: 1100,
-    brief: 'Two legs to go. The air over the fire islands is rough and the storms never really clear.',
-    arrive: [
-      'Juniper Atoll is a strip of coral barely longer than the runway. A test pilot named Marguerite Diallo is stranded here with a rocket plane and a broken arm.',
-      '"Take it home for me," she says. "It goes high enough that the sky turns black. Up there you will see why your grandmother asked about ships with no engines. There is one mark on the ocean that is not on any chart, and it is shaped like a road."',
-    ],
+    brief: 'Rough air and storms. Two legs to go.',
+    arrive: ['A stranded test pilot hands you her rocket plane.', '"Go high enough and you will see a road on the ocean that is on no chart."'],
   },
   {
     title: 'The edge of the sky', world: 'earth', from: 7, to: 8, craft: 'meteor', pay: 1200,
-    brief: 'Home. Climb until the sky goes dark and the Meteor will double its speed in the thin air. Come down gently: a steep descent from that height burns the hull.',
-    arrive: [
-      'You come in over the same hedgerow you left by. All the way round. In the big shed at the end of the field, delivered while you were away, sits a crate the size of a house.',
-      'The Ark. You spend three weeks on the gas bags and the engines before you try the key. It turns. The door does not open onto the deck. It opens onto a river meadow in spring, and the air coming through it smells of woodsmoke and wet earth.',
-    ],
+    brief: 'Home. Climb till the sky goes black, then come down gently.',
+    arrive: ['All the way round. A crate the size of a house is waiting: the Ark.', 'The key turns. The door opens on a river meadow in spring.'],
   },
   // ---------- Chapter 2: the door in the Ark ----------
   {
     ch: 'Chapter 2 · The Door in the Ark', title: 'Han: the listening bronze', world: 'han', from: 0, to: 1, craft: 'ark', pay: 900,
-    brief: 'You have brought the Ark through its own door, and the year is 132. Follow the Luo River to the walls of Luoyang. Fly gently and set down outside the gate.',
-    arrive: [
-      'Nobody runs. A crowd gathers, and through it comes a court official in his fifties with ink on his sleeves: Zhang Heng, astronomer, poet, and maker of the bronze vessel that tells the court when the earth shakes hundreds of miles away. He walks once round the Ark and says, "You are the second."',
-      'The books at home give him one seismoscope. His workshop has eight, cast by a foundry run by two sisters, and seven of them do not listen to the ground. They are aimed upward. "Things fall from the sky," he says, "and they fall along roads. Your predecessor helped me draw the first of them." He gives you a silk chart of that road, and a jar of the lacquer his craftsmen use to seal bronze. It seals gas bags too.',
-    ],
-    real: 'In the history books: Zhang Heng built a seismoscope in 132 CE that detected distant earthquakes, and was a noted astronomer and mathematician. Imagined for this story: the other seven instruments, the sky roads, and his meeting with Nan.',
+    brief: 'The year is 132. Follow the river to Luoyang.',
+    arrive: ['Zhang Heng, court astronomer, walks round the Ark. "You are the second."', 'He has eight earthquake bowls. Seven point at the sky. "Things fall along roads up there." He gives you the chart.'],
+    real: 'Real: Zhang Heng’s seismoscope, 132 CE. Invented: the other seven, and the sky roads.',
   },
   {
     title: 'Tang: the monk who measured the world', world: 'tang', from: 0, to: 1, craft: 'ark', pay: 900,
-    brief: 'The door opens on the year 725. Chang’an lies north across the farmland: the largest city on Earth, a million people inside its walls.',
-    arrive: [
-      'You set down in the western market among Sogdian horse traders, Persian glass sellers and a Korean troupe of acrobats who immediately want to climb the rigging. Nothing at school said the capital of the Tang sounded like forty languages at once.',
-      'The monk Yi Xing finds you by dusk. He has just finished measuring the length of a degree of the Earth with survey teams strung over two thousand li, and with the engineer Liang Lingzan he has built a water-driven globe of the heavens that ticks. He shows you what makes it tick: a little rocking gate that lets the wheel advance one tooth at a time. "The lady with the wooden bird said this would matter in a thousand years." He fits a brass copy of it to the Ark’s engines. They have never run so evenly.',
-    ],
-    real: 'In the history books: Yi Xing led a meridian survey around 724 CE and, with Liang Lingzan, built a water-powered celestial globe with an early escapement. Chang’an really was among the largest and most international cities of its age. Imagined: his visitor, and the gift to the Ark.',
+    brief: 'The year is 725. Fly north to Chang’an, the biggest city on Earth.',
+    arrive: ['A market of forty languages. The monk Yi Xing has just measured the Earth.', 'His water clock ticks with a tiny rocking gate. He fits a copy to the Ark’s engines.'],
+    real: 'Real: Yi Xing’s survey and water-driven globe, about 725. Invented: the gift.',
   },
   {
     title: 'Song: the tower that kept the sky', world: 'song', from: 0, to: 1, craft: 'ark', pay: 900,
-    brief: 'The year is 1092. Follow the Yellow River east to Kaifeng. Look for a wooden tower taller than anything round it, with a bronze sphere on the roof.',
-    arrive: [
-      'Kaifeng does not sleep. There are restaurants open at midnight with printed menus, shops that take paper money, and a man selling books made with movable type who cannot understand why you find that remarkable.',
-      'Su Song’s clock tower is forty feet of joinery driven by a waterwheel and a chain of iron links. Its armillary sphere turns with the sky; inside, wooden figures come out to strike the hours. He takes you up a stair that is on none of his own published drawings. The top floor is a room of brass rods and counting wheels, and it is not telling the time. "It tells where things will be," he says. "The moon. The red wanderer. And a third place, which the lady asked me to add." He copies three tables onto paper for you, in the script from the back of the logbook. You can read it now. It was always numbers.',
-    ],
-    real: 'In the history books: Su Song completed a water-driven astronomical clock tower in Kaifeng about 1094, with a chain drive and an escapement, and published its design. Song cities had night markets, restaurants, paper money and movable type printing. Imagined: the hidden upper room and its tables.',
+    brief: 'The year is 1092. Follow the Yellow River to Kaifeng’s clock tower.',
+    arrive: ['Kaifeng: night markets, paper money, printed books.', 'Su Song’s clock tower hides a room that tracks the Moon, Mars and a third place. He copies you the tables. Nan’s script was always numbers.'],
+    real: 'Real: Su Song’s clock tower, about 1094. Invented: the hidden room.',
   },
   {
     title: 'Ming: the star raft', world: 'ming', from: 0, to: 1, craft: 'ark', pay: 900,
-    brief: 'The year is 1405. Downriver from Purple Mountain is the Longjiang shipyard, where the largest wooden ships ever built are being fitted out for the western ocean.',
-    arrive: [
-      'The yard is a forest of masts. Ships the length of a street lie in their docks, and the sailors have a name for them that the books at home translate without a second thought: star rafts.',
-      'A master shipwright, an old woman everyone calls Aunt Ruan, leads you past the docks to a shed with a guard on it. On the floor is a full-size drawing of a hull that was never meant for water. No masts, no keel, a skin of overlapping tiles. "The admiral asked for ships to reach every shore," she says. "I asked him which shores. This one needs an engine that does not exist." You look at the drawing for a long time. With Zhang Heng’s roads, Yi Xing’s rocking gate and Su Song’s tables, you know how to build the engine. She rolls up the drawing and puts it in your hands. "Then it was always for you. Tell the lady it took us long enough."',
-    ],
-    real: 'In the history books: the Longjiang shipyard at Nanjing built the treasure fleet that Zheng He led from 1405, and its ships were indeed called "star rafts" (xingcha). Imagined: Aunt Ruan and the drawing of a hull for the sky.',
+    brief: 'The year is 1405. Fly downriver to the treasure fleet’s shipyard.',
+    arrive: ['The sailors call the great ships star rafts.', 'Aunt Ruan, shipwright, shows you a hull never meant for water. "It needs an engine that does not exist." You can build it now. She hands you the drawing.'],
+    real: 'Real: the Longjiang shipyard and Zheng He’s "star rafts", 1405. Invented: Aunt Ruan’s drawing.',
   },
   // ---------- Chapter 3: star raft ----------
   {
-    ch: 'Chapter 3 · Star Raft', title: 'Learning to drive a star raft', world: 'earth', from: 0, to: 8, craft: 'starling', pay: 1500,
-    brief: 'It took a year to build. Take the Starling once round the world to learn her. Climb until the sky is black: above 100 km the engines idle and you coast. Then come down slowly to land back at Wrenfield.',
-    arrive: [
-      'One lap, launch to landing. The first time took you eight legs, six aircraft and a logbook full of repairs.',
-      'From orbit you saw what the test pilot meant. Zhang Heng’s road is real: a faint straight track of light that leaves the top of the air and runs toward the Moon.',
-    ],
+    ch: 'Chapter 3 · Star Raft', title: 'First orbit', world: 'earth', from: 0, to: 8, craft: 'starling', pay: 1500,
+    brief: 'Take the Starling round the world. Climb to the black sky, coast, come down slowly.',
+    arrive: ['One lap in one flight.', 'From orbit you see it: a straight track of light running to the Moon.'],
   },
   {
     title: 'The Moon', world: 'earth', from: 0, craft: 'starling', pay: 2000, transit: { world: 'moon', to: 0 },
-    brief: 'Climb above 100 km and hold there while the Starling lines up with the road. She will make the burn herself. On the far side, descend gently and land at the ground Su Song’s first table points to. Gravity is a sixth of what you know: everything falls slowly.',
-    transitText: ['The engines light and stay lit. Earth shrinks to a blue coin in the rear window. For three days there is nothing to fix, and you find you do not know what to do with your hands.', 'Then the Moon fills the windscreen, grey and enormous, and the road bends down toward a dark plain.'],
-    arrive: [
-      'The dust has never been walked on, and yet there is a landing ground: a ring of fitted stone, swept clean, with a low dome beside it.',
-      'Inside the dome is a workbench. On it sit a bronze bowl with eight dragons, all pointing the same way, and a wooden mallet with O.W. burned into the handle. She was here. The dragons point at a red star low on the horizon.',
-    ],
+    brief: 'Climb above 100 km and hold. She makes the burn herself. Low gravity: land gently.',
+    transitText: ['Three days. Earth shrinks to a blue coin, then the Moon fills the windscreen.'],
+    arrive: ['A landing ring of fitted stone, and a dome.', 'Inside: a mallet marked O.W. and a bronze bowl. Its dragons point at a red star.'],
   },
   {
     title: 'Mars', world: 'moon', from: 0, craft: 'starling', pay: 2500, transit: { world: 'mars', to: 0 },
-    brief: 'Follow the dragons. Lift off from the Moon, climb and hold for the burn. Mars has thin air and dust storms that will scour the hull. Su Song’s second table gives a canyon.',
-    transitText: ['Seven months, by the tables. The road makes it eleven days. You rebuild the fuel pumps twice on the way, because you can and because it passes the time.', 'Mars comes up the colour of rust and old brick, with a dust storm the size of a country crawling across it.'],
-    arrive: [
-      'The canyon is four miles deep, and in its floor someone has cut a dry dock. On the stocks lies the ribcage of a ship built to Aunt Ruan’s drawing, three times the size of the Starling, never finished.',
-      'There are tools laid out in order, and a kettle. Chalked on a rib, in handwriting you know from every birthday card of your childhood: "Ran out of timber. Gone ahead in the small one. Third table. Bring tea."',
-    ],
+    brief: 'Follow the dragons. Lift off, climb and hold. Beware dust storms.',
+    transitText: ['Eleven days on the road. Mars comes up the colour of rust.'],
+    arrive: ['A dry dock in a canyon, and a half-built ship.', 'Chalked on a rib, in Nan’s hand: "Ran out of timber. Gone ahead. Bring tea."'],
   },
   {
     title: 'The wide universe', world: 'mars', from: 0, craft: 'starling', pay: 0, transit: { world: 'deep', to: 0 },
-    brief: 'The third table is not a place round this sun. Climb, hold, and let the road take you.',
-    transitText: ['The stars ahead bunch together and turn blue. The stars behind go red and thin out. The instruments read numbers that Su Song’s brass room would have understood better than you do.', 'Then it stops, all at once, and there is a world below with a violet sea and two small suns.'],
-    arrive: [
-      'There are lanterns along the landing ground. Somebody lights them every evening, a woman at the tea stall tells you, in case.',
-      'At the end of the row a small patched star raft is pulled up on the sand, and beside it, in a deck chair, with a wrench in her lap and a logbook on her knee, an old woman is asleep in the sun. She opens one eye when your shadow falls on her. "You took the long way round," Nan says. "Good. Sit down. I have so much to show you."',
-    ],
+    brief: 'The third table is not round this sun. Climb, hold, let the road take you.',
+    transitText: ['The stars bunch up and turn blue. Then: a violet sea and two small suns.'],
+    arrive: ['Lanterns line the landing ground. Someone lights them every evening, in case.', 'An old woman in a deck chair opens one eye. "You took the long way round," says Nan. "Good. Sit down."'],
   },
 ];
 
-export const EPILOGUE = 'The logbook has blank pages again. Take the Starling up whenever you like.';
+export const EPILOGUE = 'The logbook has blank pages again. Fly anywhere.';
 
 // One optional job on the way for each flight, keyed by mission number.
 // t: how far along the route (0..1). off: how far to one side. type:
 //   low  = pass low over the marker      pass = fly through the marker at any height
 //   land = set down inside the marker    high = climb above `alt` anywhere on the flight
 export const TASKS = {
-  0: { prop: 'lighthouse', type: 'low', t: 0.5, off: -130, pay: 120, label: 'Drop the newspapers at the lighthouse (fly low over it)', after: 'The bundle lands square on the keeper’s doorstep. He waves his cap.' },
-  1: { prop: 'boat', type: 'land', water: true, t: 0.45, off: 150, pay: 220, label: 'A fishing boat is in trouble. Land on the water beside it', after: 'You pass the skipper a fuel filter and a flask of tea, and he gets under way.' },
-  2: { prop: 'buoy', water: true, type: 'pass', t: 0.5, off: -160, pay: 150, label: 'Check the weather buoy for the Saffron Quay met office', after: 'Readings noted. The glass is falling, as if you needed telling.' },
-  3: { prop: 'tents', type: 'land', t: 0.55, off: 110, pay: 240, label: 'Set down at the shepherds’ camp with the medicine', after: 'A child is carried out to see the brass insect that brought the doctor’s parcel.' },
-  4: { type: 'high', alt: 34, pay: 200, label: 'Climb above 17,000 ft for the survey photograph', after: 'The whole range lies under your wing, and the shutter clicks.' },
-  5: { prop: 'icebreaker', water: true, type: 'pass', t: 0.4, off: 190, pay: 180, label: 'Overfly the icebreaker and report its position', after: 'A dot of red on the white, with a hundred tiny arms waving.' },
-  6: { prop: 'vent', type: 'low', t: 0.5, off: -170, pay: 220, label: 'Drop the sensor into the smoking crater (fly low over it)', after: 'The canister tumbles into the steam. The observatory radio crackles its thanks.' },
-  7: { type: 'high', alt: 80, pay: 250, label: 'Climb until the sky is black and look for the road', after: 'There: a faint straight line on the sea that no chart shows.' },
-  8: { prop: 'hut', type: 'land', t: 0.5, off: 120, pay: 260, label: 'Set down at the bronze foundry and collect the casting', after: 'Two sisters in leather aprons load a bronze dragon head, still warm.' },
-  9: { prop: 'kite', type: 'pass', t: 0.45, off: -140, pay: 200, label: 'Find the survey team’s kite and note its height', after: 'A silk kite carrying a plumb line and a very small, very brave monk’s notebook.' },
-  10: { prop: 'hut', type: 'low', t: 0.5, off: 150, pay: 220, label: 'Scatter the printed handbills over the river town (fly low)', after: 'A thousand sheets of movable type flutter down onto the market.' },
-  11: { prop: 'rafts', type: 'land', water: true, t: 0.5, off: -150, pay: 260, label: 'Come down beside the timber rafts and take on teak', after: 'The raftsmen pole the logs alongside and roar with laughter at your paddle wheels.' },
-  12: { type: 'high', alt: 175, pay: 300, label: 'Reach orbit: climb above 100 km', after: 'The engines fall quiet. You are falling round the world.' },
+  0: { prop: 'lighthouse', type: 'low', t: 0.5, off: -130, pay: 120, label: 'Drop newspapers: fly low over the lighthouse', after: 'Right on the keeper’s doorstep.' },
+  1: { prop: 'boat', type: 'land', water: true, t: 0.45, off: 150, pay: 220, label: 'Help the fishing boat: land beside it', after: 'A fuel filter and a flask of tea. He is under way.' },
+  2: { prop: 'buoy', water: true, type: 'pass', t: 0.5, off: -160, pay: 150, label: 'Fly over the weather buoy', after: 'Readings noted. The glass is falling.' },
+  3: { prop: 'tents', type: 'land', t: 0.55, off: 110, pay: 240, label: 'Medicine for the camp: land there', after: 'The doctor’s parcel is delivered.' },
+  4: { type: 'high', alt: 34, pay: 200, label: 'Survey photo: climb above 17,000 ft', after: 'The whole range under your wing. Click.' },
+  5: { prop: 'icebreaker', water: true, type: 'pass', t: 0.4, off: 190, pay: 180, label: 'Fly over the icebreaker', after: 'A hundred tiny arms wave.' },
+  6: { prop: 'vent', type: 'low', t: 0.5, off: -170, pay: 220, label: 'Drop the sensor: fly low over the crater', after: 'Into the steam it goes.' },
+  7: { type: 'high', alt: 80, pay: 250, label: 'Climb till the sky is black', after: 'There: a straight line on the sea.' },
+  8: { prop: 'hut', type: 'land', t: 0.5, off: 120, pay: 260, label: 'Collect the casting: land at the foundry', after: 'One bronze dragon head, still warm.' },
+  9: { prop: 'kite', type: 'pass', t: 0.45, off: -140, pay: 200, label: 'Fly past the survey kite', after: 'A kite, a plumb line, a brave monk’s notebook.' },
+  10: { prop: 'hut', type: 'low', t: 0.5, off: 150, pay: 220, label: 'Drop handbills: fly low over the town', after: 'A thousand printed sheets flutter down.' },
+  11: { prop: 'rafts', type: 'land', water: true, t: 0.5, off: -150, pay: 260, label: 'Take on teak: land by the rafts', after: 'The raftsmen laugh at your paddle wheels.' },
+  12: { type: 'high', alt: 175, pay: 300, label: 'Reach orbit: climb above 100 km', after: 'The engines go quiet. You are falling round the world.' },
 };
 
 // The Ark's door. Each dynasty opens once the story has taken you there (the number is its mission).
@@ -429,23 +379,23 @@ export const DOOR = [['han', 8], ['tang', 9], ['song', 10], ['ming', 11]];
 // text is what you see; note separates the record from the story's invention.
 export const ERA_FINDS = {
   han: [
-    { id: 'han_paper', title: 'The paper makers', text: 'A workshop by the stream is pulping bark, hemp and old fishing nets into sheets and drying them on racks. The court official Cai Lun reported this method to the emperor in 105. It will carry every book written for the next two thousand years.', note: 'In the history books: Cai Lun and papermaking, 105 CE. Imagined: one sheet on the rack has a careful drawing of a biplane.' },
-    { id: 'han_bellows', title: 'The water bellows', text: 'A waterwheel works a row of bellows that blow a furnace, with nobody on the treadles at all. The prefect Du Shi built engines like this in the year 31 so that iron farm tools could be cast cheaply.', note: 'In the history books: Du Shi’s water-powered bellows, 31 CE. Imagined: the two sisters who run this one, and their opinion of your rivets.' },
-    { id: 'han_road', title: 'The western road', text: 'A caravan of camels is coming in from the west with glass, horses and grape vines, more than two centuries after the envoy Zhang Qian first brought back news of the kingdoms beyond the desert.', note: 'In the history books: Zhang Qian’s journeys in the 2nd century BCE opened the routes later called the Silk Road. Imagined: the trader who swears he has seen your ship before, further west.' },
+    { id: 'han_paper', title: 'The paper makers', text: 'Bark, hemp and old nets, pulped and dried into sheets.', note: 'Real: Cai Lun, 105 CE. Invented: the biplane sketched on one sheet.' },
+    { id: 'han_bellows', title: 'The water bellows', text: 'A waterwheel pumps the furnace bellows. Nobody on the treadles.', note: 'Real: Du Shi, 31 CE. Invented: the two sisters who run it.' },
+    { id: 'han_road', title: 'The western road', text: 'Camels from the west, carrying glass, horses and grape vines.', note: 'Real: the Silk Road. Invented: the trader who has seen your ship before.' },
   ],
   tang: [
-    { id: 'tang_pagoda', title: 'The Wild Goose Pagoda', text: 'Storeys of brick rising over the monastery where the monk Xuanzang translated the scriptures he carried home from India. It was first raised in 652 and rebuilt taller in 704.', note: 'In the history books: the Giant Wild Goose Pagoda in Chang’an, 652 and 704. Imagined: the small wren scratched into a brick near the top.' },
-    { id: 'tang_polo', title: 'Polo on the palace ground', text: 'Riders in silk thunder after a ball no bigger than a fist. The game came east along the trade roads, the court is mad for it, and the women play as hard as the men.', note: 'In the history books: polo was a passion of the Tang court, and tomb figures show women players. Imagined: the rider who salutes the Ark with her mallet.' },
-    { id: 'tang_canal', title: 'The Grand Canal', text: 'Grain barges nose to tail as far as you can see, on a waterway dug a century ago to join the Yellow River to the Yangtze. It is what feeds a capital of a million people.', note: 'In the history books: the Grand Canal was completed under the Sui in 609 and carried the Tang grain supply. Imagined: nothing. It really was that big.' },
+    { id: 'tang_pagoda', title: 'The Wild Goose Pagoda', text: 'Brick storeys over the monastery where Xuanzang translated his scriptures.', note: 'Real: built 652, raised 704. Invented: the wren scratched near the top.' },
+    { id: 'tang_polo', title: 'Polo on the palace ground', text: 'Riders in silk chase a fist-sized ball. The women play as hard as the men.', note: 'Real: the Tang court loved polo. Invented: the rider who salutes you.' },
+    { id: 'tang_canal', title: 'The Grand Canal', text: 'Grain barges nose to tail, feeding a city of a million.', note: 'Real: finished 609. Invented: nothing. It was that big.' },
   ],
   song: [
-    { id: 'song_type', title: 'The printer’s shop', text: 'Bi Sheng’s trick, fifty years old now: each character is a little block of baked clay, set in an iron frame with wax, inked, pressed, and then broken up to be used again.', note: 'In the history books: Bi Sheng’s movable type, about 1040, described by Shen Kuo. Imagined: the handbill being set today, which advertises a flying ship.' },
-    { id: 'song_compass', title: 'The needle that points south', text: 'A scholar floats a magnetised needle in a bowl of water and notes that it does not point quite true south, but a little to the east of it. Shen Kuo wrote that down in 1088.', note: 'In the history books: Shen Kuo’s account of the magnetic needle and its declination, 1088. Imagined: his polite interest in your compass, and his list of what is wrong with it.' },
-    { id: 'song_bridge', title: 'The rainbow bridge', text: 'A timber arch with no piers leaps the river in a single span, so the grain boats can pass beneath with their masts lowered. Half the city seems to be standing on it, buying snacks.', note: 'In the history books: the rainbow bridge of Kaifeng, painted in the scroll Along the River During the Qingming Festival. Imagined: the snack seller who wants to know if the Ark is for hire.' },
+    { id: 'song_type', title: 'The printer’s shop', text: 'Each character is a clay block: set, inked, pressed, reused.', note: 'Real: Bi Sheng, about 1040. Invented: today’s handbill, for a flying ship.' },
+    { id: 'song_compass', title: 'The needle that points south', text: 'A magnet needle floats in a bowl. It points a little east of south.', note: 'Real: Shen Kuo, 1088. Invented: his list of faults in your compass.' },
+    { id: 'song_bridge', title: 'The rainbow bridge', text: 'A timber arch crosses the river in one span. Half the city is on it, buying snacks.', note: 'Real: Kaifeng’s rainbow bridge. Invented: the snack seller who wants to hire the Ark.' },
   ],
   ming: [
-    { id: 'ming_wall', title: 'The longest wall', text: 'Nanjing’s city wall, finished a dozen years ago, runs for more than thirty kilometres. Each brick is stamped with the name of the man who made it, so that a bad one can be traced back to him.', note: 'In the history books: the Nanjing city wall, built 1366 to 1393, with inscribed bricks. Imagined: one brick stamped with a name you know.' },
-    { id: 'ming_book', title: 'The encyclopedia', text: 'Two thousand scholars are copying everything worth knowing into a single work for the Yongle emperor. When it is done it will fill more than eleven thousand volumes.', note: 'In the history books: the Yongle Encyclopedia, compiled 1403 to 1408. Imagined: the entry on flying machines, which a clerk lets you correct.' },
-    { id: 'ming_dock', title: 'The dry docks', text: 'Basins cut beside the river, long enough for the great ships that are said to carry nine masts. The hull is built on the dry floor, then the gate is opened and the Yangtze floats her out.', note: 'In the history books: the building basins of the Longjiang shipyard, some of which survive. The size of the largest ships is still argued over. Imagined: Aunt Ruan waving from the dock gate.' },
+    { id: 'ming_wall', title: 'The longest wall', text: 'Thirty kilometres of wall. Every brick is stamped with its maker’s name.', note: 'Real: built 1366 to 1393. Invented: one brick with a name you know.' },
+    { id: 'ming_book', title: 'The encyclopedia', text: 'Two thousand scholars copy everything worth knowing into eleven thousand volumes.', note: 'Real: the Yongle Encyclopedia, 1403 to 1408. Invented: the flying-machine entry you correct.' },
+    { id: 'ming_dock', title: 'The dry docks', text: 'Build the hull on the dry floor, open the gate, and the river floats her out.', note: 'Real: the Longjiang basins. Invented: Aunt Ruan waving from the gate.' },
   ],
 };

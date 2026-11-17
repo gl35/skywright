@@ -141,7 +141,7 @@ function enterHangar() {
   if (G.newCraft && G.save.mission > 0) {
     const A = AIRCRAFT[G.newCraft];
     const worst = PART_KEYS.reduce((a, k) => (G.ac.cond[k] < G.ac.cond[a] ? k : a), 'engine');
-    showCards([{ title: `The ${A.name}`, body: [A.blurb, `She is yours for the next flight, and she needs work. The ${PARTS[worst].name.toLowerCase()} is the worst of it.`], btn: 'To the workshop' }], openHangar);
+    showCards([{ title: `The ${A.name}`, body: [`${A.blurb} Fix the ${PARTS[worst].name.toLowerCase()} first.`], btn: 'Workshop' }], openHangar);
   } else openHangar();
 }
 
@@ -153,10 +153,7 @@ function towBack(kind) {
   if (dmg) for (const k of PART_KEYS) G.ac.cond[k] = Math.max(5, G.ac.cond[k] - dmg);
   const home = WORLDS[G.mission.world].stops[G.mission.from].name;
   const title = kind === 'crash' ? 'Crashed' : kind === 'ditch' ? 'Ditched' : 'Stranded';
-  const first = kind === 'crash' ? 'You walk away from it. The machine does not look as lucky.'
-    : kind === 'ditch' ? 'She settles into the swell and you climb out onto the wing.'
-      : 'With a dry tank there is nothing to do but wait.';
-  showCards([{ title, body: [first, `It takes time, favours and $${fee} to get the ${AIRCRAFT[G.craft].name} back to ${home}.${dmg ? ' Every part took damage.' : ''}`], btn: 'Back to the workshop' }], enterHangar);
+  showCards([{ title, body: [`Towed back to ${home}: <b>-$${fee}</b>.${dmg ? ' Every part damaged.' : ''}`], btn: 'Workshop' }], enterHangar);
 }
 
 const actions = {
@@ -188,34 +185,31 @@ const actions = {
   kitcap() { const s = G.save; if (s.kitCap < KIT_CAP_MAX && s.money >= KIT_CAP_COST) { s.money -= KIT_CAP_COST; s.kitCap++; } },
   shift() { // an odd job is a question: answer it right to be paid
     G.quiz = makeQuestion(); G.quizFor = 'job';
-    ui.showPanel(ui.quizHTML(G.quiz, `Odd job \u00b7 pays $${jobPay(G.save, G.stats)} for the right answer`));
+    ui.showPanel(ui.quizHTML(G.quiz, `Odd job \u00b7 $${jobPay(G.save, G.stats)}`));
   },
   brew() { // stuck in the open with no fuel: an engineer makes some
     G.quiz = makeQuestion(); G.quizFor = 'fuel';
-    G.quiz.intro = G.stats.space ? 'You unfold the solar still over a seam of ice. To set the cracking plates right you need to know:'
-      : 'You rig a still from the cooking pot and a length of fuel line. To get the mixture right you need to know:';
-    ui.showPanel(ui.quizHTML(G.quiz, 'Making fuel \u00b7 a right answer adds a fifth of a tank'));
+    ui.showPanel(ui.quizHTML(G.quiz, 'Make fuel \u00b7 +20%'));
   },
   scav() {
     G.quiz = makeQuestion(); G.quizFor = 'kit';
-    G.quiz.intro = 'You go looking for anything that could be a gasket, a clip or a length of wire. To make it fit you need to know:';
-    ui.showPanel(ui.quizHTML(G.quiz, 'Scavenging \u00b7 a right answer makes one repair kit'));
+    ui.showPanel(ui.quizHTML(G.quiz, 'Make a kit \u00b7 +1'));
   },
   answer(i) {
     const q = G.quiz, s = G.save, ok = +i === q.answer, pay = jobPay(s, G.stats);
-    let good, bad = `The answer was <b>${q.right}</b>. `;
+    let good, bad = '';
     if (G.quizFor === 'fuel') {
       if (ok) G.ac.fuel = Math.min(G.stats.tank, G.ac.fuel + G.stats.tank * 0.2);
-      good = 'It drips, it smells terrible, and it burns. <b>A fifth of a tank.</b>'; bad += 'The batch is ruined, but you can try again.';
+      good = '<b>+20% fuel.</b>'; bad = 'No fuel. Try again.';
     } else if (G.quizFor === 'kit') {
       if (ok) s.kits = Math.min(s.kitCap, s.kits + 1);
-      good = 'Not pretty, but it will hold. <b>One repair kit.</b>'; bad += 'It does not fit. Try something else.';
+      good = '<b>+1 repair kit.</b>'; bad = 'No kit. Try again.';
     } else {
       if (ok) { s.money += pay; s.shift = (+s.shift || 0) + 1; }
-      good = `You are paid <b>$${pay}</b>.`; bad += 'No pay this time, but there is always another job.';
+      good = `<b>+$${pay}</b>`; bad = 'No pay. Try another.';
     }
     if (ok) { beep(880, 0.1); setTimeout(() => beep(1180, 0.14), 90); } else beep(150, 0.25, 'sawtooth');
-    ui.showPanel(ui.quizResultHTML(q, ok, ok ? good : bad, G.mode === 'field' ? 'Back to camp' : 'Back to the workshop'));
+    ui.showPanel(ui.quizResultHTML(q, ok, ok ? good : bad, 'Back'));
   },
   quizdone() { G.quiz = null; G.pilot.work = 2.5; },
   upgrade(k) {
@@ -248,12 +242,12 @@ const actions = {
     s.visit = w; s.pick = null;
     beep(520, 0.1); setTimeout(() => beep(780, 0.1), 110); setTimeout(() => beep(1040, 0.25), 220);
     ui.flash();
-    showCards([{ ch: 'The door', title: WORLDS[w].name, body: ['You turn the brass key and take the Ark through its own door. The air changes first: woodsmoke, wet earth, and not one engine anywhere under the sky.', 'Nothing is asked of you here. Look round.'], btn: 'Step out' }], enterHangar);
+    showCards([{ ch: 'The door', title: WORLDS[w].name, body: ['Woodsmoke, wet earth, and not one engine under the sky. Look round.'], btn: 'Step out' }], enterHangar);
   },
   doorhome() {
     G.save.visit = null;
     ui.flash();
-    showCards([{ ch: 'The door', title: 'Back to your own year', body: ['The meadow folds away behind you like a page turning, and the door clicks shut.'], btn: 'Carry on' }], enterHangar);
+    showCards([{ ch: 'The door', title: 'Back to your own year', body: ['The door clicks shut behind you.'], btn: 'Carry on' }], enterHangar);
   },
   fly(id) { // take a different machine from the fleet
     const s = G.save;
@@ -287,10 +281,10 @@ const actions = {
     ui.el.hud.classList.remove('hidden');
     if (!s.seen.controls) {
       s.seen.controls = true;
-      G.hintT = 10;
+      G.hintT = 8;
       ui.setHint(isTouch
-        ? `Drag left or right to steer.<br>${settings.realStick ? 'Drag down to climb, up to descend, like a real stick.' : 'Drag up to climb, down to descend.'}<br>` + 'The slider on the right is the throttle.<br>VIEW changes the camera.<br><br>PULL = CLIMB at the top left swaps that.<br>Follow the arrow to the<br>next field and descend onto the runway to land.'
-        : `A / D or arrows: steer<br>${settings.realStick ? 'S: pull back to climb &nbsp; W: push to descend' : 'W: climb &nbsp; S: descend'}<br>` + 'Q / E: throttle &nbsp; Space: fix a breakdown<br>V: change view &nbsp; N: music &nbsp; X: special move<br><br>Pull back to take off (I swaps the stick). Follow the arrow to the<br>next field and descend onto the runway to land.');
+        ? `Drag to steer. ${settings.realStick ? 'Drag down to climb.' : 'Drag up to climb.'}<br>Right slider: throttle.<br>Follow the arrow. Land on the runway.`
+        : `A/D steer \u00b7 ${settings.realStick ? 'S climb \u00b7 W descend' : 'W climb \u00b7 S descend'}<br>Q/E throttle \u00b7 Space fix \u00b7 X special \u00b7 V view<br>Follow the arrow. Land on the runway.`);
     }
   },
 };
@@ -436,7 +430,7 @@ function checkExtras(p, floor) {
     G.save.found[f.id] = true; G.save.money += 150;
     persist();
     beep(660, 0.1); setTimeout(() => beep(990, 0.1), 100); setTimeout(() => beep(1320, 0.25), 200);
-    showCards([{ ch: 'Curiosity', title: f.title, body: [f.text, '<b>+$150</b> for the sketch you send home.'], note: f.note, btn: 'Fly on' }], () => { G.mode = 'flying'; ui.el.hud.classList.remove('hidden'); });
+    showCards([{ ch: 'Curiosity', title: f.title, body: [`${f.text} <b>+$150</b>`], note: f.note, btn: 'Fly on' }], () => { G.mode = 'flying'; ui.el.hud.classList.remove('hidden'); });
     return;
   }
   const d = G.portal;
@@ -458,7 +452,7 @@ function checkExtras(p, floor) {
   const ok = t.type === 'high' ? p.alt > t.alt : t.type === 'low' ? near && p.alt - floor < LOW : near;
   if (ok) {
     if (t.type === 'low') G.drops.push({ kind: 'drop', x: p.x, y: p.y, z: p.alt, gz: t.gz, age: 0 }); // out it goes
-    finishTask(); ui.setHint(`<b>Done.</b> ${t.after}<br>+$${t.pay}`); G.hintT = 6; }
+    finishTask(); ui.setHint(`<b>Done +$${t.pay}</b><br>${t.after}`); G.hintT = 4; }
 }
 
 // ---------- in-flight repair ----------
@@ -516,10 +510,10 @@ function updateTakeoff(dt) {
   else p.vz = onGround ? 0 : lerp(p.vz, -1.5, Math.min(1, dt * 2));
   p.alt = Math.max(floor, p.alt + p.vz * dt);
   p.lean = lerp(p.lean, p.alt > floor ? 0.5 : 0, Math.min(1, dt * 3));
-  const up = settings.realStick ? (isTouch ? 'drag down, like pulling a stick back' : 'S or the down arrow, like pulling a stick back') : isTouch ? 'drag up' : 'W or the up arrow';
-  if (p.throttle < 0.3 && !st.hover) ui.setAlert('Open the throttle to start the take-off run', true);
+  const up = settings.realStick ? (isTouch ? 'drag down' : 'S') : isTouch ? 'drag up' : 'W';
+  if (p.throttle < 0.3 && !st.hover) ui.setAlert('Open the throttle', true);
   else if (!ready) ui.setAlert('Gathering speed', true);
-  else if (onGround) ui.setAlert(`Pull up to take off: ${up}`, true);
+  else if (onGround) ui.setAlert(`Pull up: ${up}`, true);
   else ui.setAlert(null);
   if (p.alt > floor + 4) { G.mode = 'flying'; G.lastLvl = here; ui.setAlert(null); }
 }
@@ -644,21 +638,21 @@ function updateFlight(dt) {
   const ahead = levelAt(p.x + Math.cos(p.heading) * p.speed * 1.6, p.y + Math.sin(p.heading) * p.speed * 1.6) * HZ + G.belly;
   const nearField = airfieldAt(p.x, p.y) >= 0 || dist < 60;
   const wet = world().water;
-  if (failed) ui.setAlert(`${PARTS[failed].fail} · ${PARTS[failed].effect}${G.save.kits > 0 ? ' · PRESS FIX' : ' · NO KITS: BODGE IT'}`);
-  else if (dead) ui.setAlert(`${ac.fuel <= 0 ? 'OUT OF FUEL' : 'ENGINE DEAD'} · GLIDING · look for ${st.floats ? 'water or open ground' : 'open ground'} and set down`);
-  else if (G.heat > 0.15) ui.setAlert('RE-ENTRY HEAT · SHALLOW YOUR DESCENT');
-  else if (ahead > p.alt - 0.5 && ahead > floor + 1) ui.setAlert('TERRAIN AHEAD · CLIMB OR TURN');
+  if (failed) ui.setAlert(`${PARTS[failed].fail} · ${PARTS[failed].effect}${G.save.kits > 0 ? ' · FIX' : ' · BODGE'}`);
+  else if (dead) ui.setAlert(`${ac.fuel <= 0 ? 'OUT OF FUEL' : 'ENGINE DEAD'} · GLIDE TO ${st.floats ? 'WATER OR FLAT GROUND' : 'FLAT GROUND'}`);
+  else if (G.heat > 0.15) ui.setAlert('HEAT · DESCEND SLOWER');
+  else if (ahead > p.alt - 0.5 && ahead > floor + 1) ui.setAlert('TERRAIN · CLIMB OR TURN');
   else if (p.alt - floor < 2.5 && p.vz < 0 && !nearField) ui.setAlert(lvl === 0 && wet && !st.floats ? 'TOO LOW · PULL UP' : 'LOW');
   else if (G.inCell) ui.setAlert('INSIDE A STORM');
   else if (ac.fuel / st.tank < 0.15) ui.setAlert('LOW FUEL');
   else if (G.task && !G.task.done && G.task.type === 'low' && Math.hypot(G.task.x - p.x, G.task.y - p.y) < G.task.r * 3)
-    ui.setAlert(p.alt - floor >= LOW ? 'Too high for the drop. Come down low over the ring' : 'Low enough. Fly through the ring', true);
+    ui.setAlert(p.alt - floor >= LOW ? 'Too high. Come down' : 'Fly through the ring', true);
   else if (G.task && !G.task.done && G.task.type === 'land' && Math.hypot(G.task.x - p.x, G.task.y - p.y) < G.task.r * 3)
-    ui.setAlert(p.speed > st.speed * 0.8 ? 'Throttle back, then set down inside the ring' : 'Set down inside the ring', true);
-  else if (!dest) ui.setAlert(p.alt > 170 ? `Hold this height. Lining up the burn: ${Math.ceil(6 - G.burnT)}` : 'Climb until the sky is black, then hold', true);
-  else if (thin > 0 && dist < 400 + p.alt * 25) ui.setAlert(`${dest.name} is coming up. Start a gentle descent`, true);
-  else if (orbiting) ui.setAlert('In orbit. Engines idling', true);
-  else if (dist < 220) ui.setAlert(dist < 60 ? (p.speed > st.speed * 0.8 ? 'Throttle back, then descend onto the landing ground' : 'Descend onto the landing ground') : `${dest.name} ahead. Start your descent`, true);
+    ui.setAlert(p.speed > st.speed * 0.8 ? 'Slow down, land in the ring' : 'Land in the ring', true);
+  else if (!dest) ui.setAlert(p.alt > 170 ? `Hold this height: ${Math.ceil(6 - G.burnT)}` : 'Climb to the black sky, then hold', true);
+  else if (thin > 0 && dist < 400 + p.alt * 25) ui.setAlert(`${dest.name} ahead. Descend gently`, true);
+  else if (orbiting) ui.setAlert('In orbit', true);
+  else if (dist < 220) ui.setAlert(dist < 60 ? (p.speed > st.speed * 0.8 ? 'Slow down and land' : 'Descend to land') : `${dest.name} ahead. Descend`, true);
   else ui.setAlert(null);
 }
 
@@ -695,9 +689,9 @@ function touchdown(lvl, was) {
     if (res === 'field' && !st.hover) {
       const onFloats = !A.surf.land; // a seaplane put down on dry land slides in on its floats
       dmg += 3 + (rough ? 10 : 0) + (onFloats ? 14 : 0) + (fast ? 6 : 0);
-      G.campNote = onFloats ? 'Floats are not wheels. She slid to a stop on her keels and the airframe took a beating.'
-        : rough ? 'Rough ground. You are down in one piece, but the airframe took a knock.'
-          : fast ? 'You came in fast and bounced. The airframe took a knock.' : 'Down safely on open ground.';
+      G.campNote = onFloats ? 'Floats on dry land: airframe damaged.'
+        : rough ? 'Rough ground: airframe knocked.'
+          : fast ? 'Too fast: airframe knocked.' : 'Down safely.';
     }
     c.frame = Math.max(0, c.frame - dmg);
     G.mode = 'rollout';
@@ -731,13 +725,13 @@ function completeMission() {
   s.mission++; s.shift = false; s.pick = null;
   const body = m.arrive.slice();
   const extra = [];
-  if (G.bonus.task) extra.push(`the job on the way ($${G.bonus.task})`);
-  if (G.bonus.sparks) extra.push(`${G.bonus.sparks} of ${G.sparks.length} sparks ($${G.bonus.cash})`);
-  if (extra.length) body.push(`Along the way: ${extra.join(' and ')}.`);
-  if (m.pay) body.push(`<b>You are paid $${m.pay}.</b>${hard ? ' You came in fast and hard, and the airframe took a knock. Ease the throttle back before you touch down.' : ''}`);
+  if (m.pay) extra.push(`<b>+$${m.pay}</b>`);
+  if (G.bonus.task) extra.push(`job +$${G.bonus.task}`);
+  if (G.bonus.sparks) extra.push(`sparks ${G.bonus.sparks}/${G.sparks.length} +$${G.bonus.cash}`);
+  if (extra.length || hard) body.push(`${extra.join(' \u00b7 ')}${hard ? ' Hard landing: slow down next time.' : ''}`);
   const cards = [{ title: m.title, body, note: m.real }];
   const next = MISSIONS[s.mission];
-  if (!next) cards.push({ title: 'The logbook is full', body: ['Sixteen flights, eight machines, four dynasties, three worlds and one very long way round.', 'Thank you for playing this prototype of Skywright.'], btn: 'Keep flying' });
+  if (!next) cards.push({ title: 'The logbook is full', body: ['Sixteen flights, four dynasties, three worlds. Thanks for playing.'], btn: 'Keep flying' });
   else if (next.ch) cards.push({ ch: 'Next', title: next.ch, body: [next.brief], btn: 'Turn the page' });
   showCards(cards, enterHangar);
 }
@@ -747,7 +741,7 @@ function makeCamp(onWater) {
   const A = AIRCRAFT[G.craft], lvl = levelAt(G.plane.x, G.plane.y), t = G.task;
   if (t && !t.done && t.type === 'land' && Math.hypot(t.x - G.plane.x, t.y - G.plane.y) < t.r + 10) { // you set down where you were needed
     finishTask();
-    showCards([{ title: 'Job done', body: [t.after, `<b>+$${t.pay}</b>`], btn: 'Carry on' }], () => makeCamp(onWater));
+    showCards([{ title: 'Job done', body: [`${t.after} <b>+$${t.pay}</b>`], btn: 'Carry on' }], () => makeCamp(onWater));
     return;
   }
   const wet = lvl === 0 && world().water;
@@ -785,7 +779,7 @@ function updateSurface(dt) {
   if (atGoal && p.speed < 0.6 && p.throttle < 0.12) { G.landing = { res: 'airfield', af, hard: false }; resolveLanding(); return; }
   if (G.ac.fuel <= 0) { makeCamp(wetHere); return; }
   if (input.pitch > 0.3) { G.takeoffFrom = { x: p.x, y: p.y }; G.mode = 'takeoff'; return; } // pull up: start a take-off run from here
-  ui.setAlert(blocked ? 'She cannot go that way' : atGoal ? 'You have arrived. Close the throttle to stop here' : `${wetHere ? 'Sailing' : A.surf.land === 'climb' ? 'Walking' : 'Taxiing'}. Pull up to take off, STOP to make camp`, true);
+  ui.setAlert(blocked ? 'Blocked' : atGoal ? 'Arrived. Close the throttle' : `${wetHere ? 'Sailing' : A.surf.land === 'climb' ? 'Walking' : 'Taxiing'}. Pull up to fly, STOP to camp`, true);
 }
 
 function resolveLanding() {
@@ -1025,7 +1019,7 @@ function frame(now, once) {
       const trip = G.mission.excursion && G.mode !== 'rollout' && G.mode !== 'down';
       O.classList.toggle('hidden', !job && !trip);
       if (trip) {
-        const txt = `\u25c6 Curiosities ${G.finds.filter((f) => f.done).length}/${G.finds.length}: fly low over a blue beam. The glowing door takes you home`;
+        const txt = `\u25c6 Finds ${G.finds.filter((f) => f.done).length}/${G.finds.length} \u00b7 fly low over blue beams`;
         if (O.textContent !== txt) O.textContent = txt;
       }
       if (job) {
@@ -1067,7 +1061,7 @@ ui.el.stopBtn.addEventListener('click', () => { if (G.mode === 'surface') makeCa
 const footBar = document.getElementById('footBar');
 function footLabel() {
   document.getElementById('footView').textContent = FOOT[G.foot.view].name;
-  document.getElementById('footHint').textContent = isTouch ? 'Drag up to walk, left and right to turn' : 'W or up arrow to walk, A / D to turn, V changes the view, B goes back';
+  document.getElementById('footHint').textContent = isTouch ? 'Drag to walk and turn' : 'W walk \u00b7 A/D turn \u00b7 V view \u00b7 B back';
 }
 function footBack() {
   if (G.mode !== 'foot') return;

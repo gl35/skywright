@@ -4,16 +4,6 @@
 const pick = (a) => a[Math.floor(Math.random() * a.length)];
 const rnd = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
 
-const INTROS = [
-  'The harbour pump has stopped. The foreman will pay, but first he wants to know you are a real engineer:',
-  'A farmer’s tractor will not start. Her daughter, who is nine, has a question for you before you touch it:',
-  'The schoolteacher needs the bell mended, and sets you a test while you work:',
-  'The radio operator is stuck on the crossword and will trade a fair wage for the answer:',
-  'An old mechanic watches you work on his generator and asks, to see what you are made of:',
-  'The innkeeper’s clock runs slow. She will pay double if you can also tell her:',
-  'A crowd has gathered round the broken well winch. Someone at the back calls out:',
-];
-
 // Fixed questions: [question, right answer, three wrong answers, a line of explanation]
 const FACTS = [
   ['Newton’s second law: F = ?', 'mass × acceleration', ['mass × velocity', 'mass ÷ acceleration', 'weight × speed'], 'Force is mass times acceleration.'],
@@ -75,7 +65,7 @@ function sum() {
 }
 
 let lastQ = '';
-// Returns { intro, q, options: [four strings], answer: index of the right one, why }.
+// Returns { q, options: [four strings], answer: index of the right one, why }.
 export function makeQuestion() {
   let item;
   do {
@@ -86,5 +76,5 @@ export function makeQuestion() {
   const [q, right, wrong, why] = item;
   const options = [right, ...wrong];
   for (let i = options.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [options[i], options[j]] = [options[j], options[i]]; }
-  return { intro: pick(INTROS), q, options, answer: options.indexOf(right), right, why: why || `The answer is ${right}.` };
+  return { q, options, answer: options.indexOf(right), right, why: why || `The answer is ${right}.` };
 }

@@ -69,8 +69,8 @@ function fixDots() { el.fixDots.textContent = '●'.repeat(fix.hits) + '○'.rep
 export function openFix(part, cond, jury = false) {
   Object.assign(fix, { open: true, part, pos: 0, dir: 1, speed: 1.05, hits: 0, cond, jury, need: jury ? 5 : 3 });
   el.fixTitle.textContent = jury
-    ? `${PARTS[part].fail}: no kits, so bodge it. Five clean hits`
-    : `${PARTS[part].fail}: stop the marker in the green`;
+    ? `${PARTS[part].fail}: no kit. Five hits`
+    : `${PARTS[part].fail}: stop in the green`;
   newZone(cond); fixDots();
   el.fixPanel.classList.remove('hidden');
 }
@@ -123,7 +123,6 @@ export function cardHTML(c) {
 export function quizHTML(q, head) {
   return `<div class="card">
     <small class="chapter">${head}</small>
-    <p>${q.intro}</p>
     <p class="qq">${q.q}</p>
     ${q.options.map((o, i) => `<button class="btn opt" data-act="answer" data-arg="${i}">${'ABCD'[i]}. ${o}</button>`).join('')}
   </div>`;
@@ -160,24 +159,22 @@ function workshop(G) {
     </div>`;
   }
   h += `<div class="row">
-    <div class="name">Repair kits ${s.kits}/${s.kitCap}</div>
+    <div class="name">Repair kits ${s.kits}/${s.kitCap} <small>fix breakdowns in flight</small></div>
     <div class="acts">
       <button class="mini" data-act="kit" ${s.kits >= s.kitCap || s.money < KIT_COST ? 'disabled' : ''}>Kit $${KIT_COST}</button>
-      <button class="mini" data-act="kitcap" ${s.kitCap >= KIT_CAP_MAX || s.money < KIT_CAP_COST ? 'disabled' : ''}>${s.kitCap >= KIT_CAP_MAX ? 'Max' : `Bigger roll $${KIT_CAP_COST}`}</button>
+      <button class="mini" data-act="kitcap" ${s.kitCap >= KIT_CAP_MAX || s.money < KIT_CAP_COST ? 'disabled' : ''}>${s.kitCap >= KIT_CAP_MAX ? 'Max' : `Carry +1 $${KIT_CAP_COST}`}</button>
     </div>
-    <p>One kit fixes one breakdown in the air.</p>
   </div>
   <div class="row">
-    <div class="name">Short of cash?</div>
-    <div class="acts"><button class="mini" data-act="shift">Odd jobs +$${jobPay(s, st)}</button></div>
-    <p>The locals pay for a right answer: a sum, a rule of engineering, or a riddle. There is always more work, though the first job pays best.</p>
+    <div class="name">Odd job <small>answer a question</small></div>
+    <div class="acts"><button class="mini" data-act="shift">Earn $${jobPay(s, st)}</button></div>
   </div>`;
   return h;
 }
 
 function skills(G) {
   const s = G.save;
-  let h = '<p><small>What you learn stays with you, whatever you are flying.</small></p>';
+  let h = '';
   for (const k of Object.keys(UPGRADES)) {
     const lv = s.up[k];
     h += `<div class="row">
@@ -191,22 +188,21 @@ function skills(G) {
 
 function fleet(G) {
   const s = G.save;
-  let h = '<p><small>Machines come to you as the story goes. The logbook suggests one for each flight, but you can take any you own.</small></p>';
+  let h = '';
   for (const id of Object.keys(AIRCRAFT)) {
     const A = AIRCRAFT[id], own = s.fleet[id];
-    if (!own) { h += '<div class="row"><div><div class="name">? ? ?</div><p>Not yet yours.</p></div></div>'; continue; }
+    if (!own) { h += '<div class="row"><div class="name">? ? ?</div></div>'; continue; }
     const st = calcStats(id, s.up);
     const worst = Math.min(...PART_KEYS.map((k) => own.cond[k]));
     h += `<div class="row">
       <div class="name">${A.name} <small>${A.kind}</small></div>
-      <div class="acts">${id === G.craft ? '<button class="mini" disabled>Flying now</button>'
-        : canFly(s, G.mission, id) ? `<button class="mini gold" data-act="fly" data-arg="${id}">Fly this</button>`
-          : '<button class="mini" disabled>Cannot leave the world</button>'}</div>
+      <div class="acts">${id === G.craft ? '<button class="mini" disabled>Flying</button>'
+        : canFly(s, G.mission, id) ? `<button class="mini gold" data-act="fly" data-arg="${id}">Fly</button>`
+          : '<button class="mini" disabled>No</button>'}</div>
       <div>
-        <p>${A.blurb}${id === G.mission.craft ? ' <b>The logbook suggests this one.</b>' : ''} Worst part: ${Math.round(worst)}%.</p>
+        <p>${id === G.mission.craft ? '<b>★ Suggested.</b> ' : ''}${A.blurb} ${surfText(A)}</p>
         <p class="abil"><b>${A.ability.name}:</b> ${A.ability.desc}</p>
-        <p>${surfText(A)}</p>
-        <div class="stats"><span>${Math.round(st.speed * (1 + st.space) * 10)} kt</span><span>${fmtAlt(st.ceil)}</span><span>${km(cruiseRange(st, st.tank))} km</span></div>
+        <div class="stats"><span>${Math.round(st.speed * (1 + st.space) * 10)} kt</span><span>${fmtAlt(st.ceil)}</span><span>${km(cruiseRange(st, st.tank))} km</span><span>Health ${Math.round(worst)}%</span></div>
       </div>
     </div>`;
   }
@@ -228,18 +224,18 @@ export function planWarnings(G) {
   const s = G.save, ac = G.ac, st = G.stats, m = G.mission;
   const out = [];
   if (m.free) return out;
-  if (G.craft !== m.craft) out.push(['warn', `The logbook suggests the ${AIRCRAFT[m.craft].name} for this flight. You are taking the ${AIRCRAFT[G.craft].name}. Change machines in the Fleet tab.`]);
+  if (G.craft !== m.craft) out.push(['warn', `The logbook suggests the ${AIRCRAFT[m.craft].name}.`]);
   const d = missionDist(m), b = BIOMES[targetOf(m).stop.biome];
   const r = cruiseRange(st, ac.fuel);
-  if (m.transit) { if (ac.fuel < st.tank * 0.6) out.push(['warn', 'Fill the tank. The climb to space is thirsty.']); }
-  else if (r < d) out.push(['bad', `Not enough fuel. Range is ${km(r)} km, the flight is ${km(d)} km.`]);
-  else if (r < d * 1.2) out.push(['warn', `Fuel is tight: ${km(r)} km of range for a ${km(d)} km flight.`]);
-  for (const k of PART_KEYS) if (ac.cond[k] < 50) out.push(['warn', `${PARTS[k].name} is worn (${Math.round(ac.cond[k])}%) and likely to fail in the air.`]);
-  if (s.kits === 0) out.push(['warn', 'No repair kits aboard.']);
+  if (m.transit) { if (ac.fuel < st.tank * 0.6) out.push(['warn', 'Fill the tank for space.']); }
+  else if (r < d) out.push(['bad', `Not enough fuel: ${km(r)} of ${km(d)} km.`]);
+  else if (r < d * 1.2) out.push(['warn', `Fuel is tight: ${km(r)} of ${km(d)} km.`]);
+  for (const k of PART_KEYS) if (ac.cond[k] < 50) out.push(['warn', `${PARTS[k].name} worn: ${Math.round(ac.cond[k])}%.`]);
+  if (s.kits === 0) out.push(['warn', 'No repair kits.']);
   if (!m.transit && !st.orbit) {
-    if (b.hs > 60 && st.ceil < 28) out.push(['warn', 'Peaks on this flight are higher than this machine can climb. Follow the valleys.']);
-    if (b.storm > 0.1 && st.ceil < 31) out.push(['warn', 'Storm cells ahead. You cannot climb over them, so go round or stay low.']);
-    if (!st.floats && b.sea > 0.56) out.push(['warn', 'Mostly open water. Nowhere to set down if something breaks.']);
+    if (b.hs > 60 && st.ceil < 28) out.push(['warn', 'Peaks too high to climb. Use the valleys.']);
+    if (b.storm > 0.1 && st.ceil < 31) out.push(['warn', 'Storms. Go round or stay low.']);
+    if (!st.floats && b.sea > 0.56) out.push(['warn', 'Open water. Nowhere to land.']);
   }
   return out;
 }
@@ -252,27 +248,26 @@ function mission(G) {
       <small class="chapter">${G.chapter}</small>
       <div class="name">${m.title}</div>
       <p>${m.brief}</p>
-      <p><b>Fly:</b> ${A.name} (${A.kind.toLowerCase()}). <b>To:</b> ${t.stop.name}${t.world !== m.world ? `, ${WORLDS[t.world].name}` : ''}${d ? `, ${km(d)} km` : ''}.${m.pay ? ` <b>Pays:</b> $${m.pay}.` : ''}</p>
+      <p><b>${A.name}</b> → ${t.stop.name}${t.world !== m.world ? `, ${WORLDS[t.world].name}` : ''}${d ? ` · ${km(d)} km` : ''}${m.pay ? ` · <b>$${m.pay}</b>` : ''}</p>
       <p class="abil"><b>${A.ability.name}:</b> ${A.ability.desc}</p>
-      <p>${surfText(A)}</p>
     </div></div>
-    ${w.length ? w.map(([c, x]) => `<p class="warnline ${c}">▲ ${x}</p>`).join('') : `<p class="okline">The ${A.name} is ready.</p>`}`;
+    ${w.length ? w.map(([c, x]) => `<p class="warnline ${c}">▲ ${x}</p>`).join('') : '<p class="okline">Ready.</p>'}`;
 }
 
 // The Ark's door: pick a dynasty you have been to in the story and go back for a look round.
 function door(G) {
   const s = G.save, found = s.found || {};
-  const tally = (w) => `${ERA_FINDS[w].filter((f) => found[f.id]).length}/${ERA_FINDS[w].length} curiosities found`;
+  const tally = (w) => `${ERA_FINDS[w].filter((f) => found[f.id]).length}/${ERA_FINDS[w].length} found`;
   if (G.mission.excursion) {
-    return `<div class="row"><div><div class="name">${WORLDS[s.visit].name}</div><p>${tally(s.visit)}. The door stands open behind you, and there is a second one glowing in the sky nearby that you can fly through.</p></div>
-      <div class="acts"><button class="mini gold" data-act="doorhome">Step back through</button></div></div>
-      ${ERA_FINDS[s.visit].map((f) => `<div class="row"><div><div class="name">${found[f.id] ? f.title : '? ? ?'}</div><p>${found[f.id] ? f.text : 'Something worth seeing. Look for a blue beam.'}</p></div></div>`).join('')}`;
+    return `<div class="row"><div><div class="name">${WORLDS[s.visit].name}</div><p>${tally(s.visit)}. Fly through the glowing door to go home.</p></div>
+      <div class="acts"><button class="mini gold" data-act="doorhome">Go home</button></div></div>
+      ${ERA_FINDS[s.visit].map((f) => `<div class="row"><div><div class="name">${found[f.id] ? f.title : '? ? ?'}</div><p>${found[f.id] ? f.text : 'Look for a blue beam.'}</p></div></div>`).join('')}`;
   }
-  let h = '<p><small>The brass key turns in the Ark\u2019s door, and it opens on other years. Visits are for exploring: the story waits for you.</small></p>';
+  let h = '';
   for (const [w, need] of DOOR) {
     const open = s.mission > need;
-    h += `<div class="row"><div><div class="name">${open ? WORLDS[w].name : '? ? ?'}</div><p>${open ? tally(w) : 'The door has not opened here yet.'}</p></div>
-      <div class="acts"><button class="mini gold" data-act="door" data-arg="${w}" ${open ? '' : 'disabled'}>Open the door</button></div></div>`;
+    h += `<div class="row"><div><div class="name">${open ? WORLDS[w].name : '? ? ?'}</div><p>${open ? tally(w) : 'Locked.'}</p></div>
+      <div class="acts"><button class="mini gold" data-act="door" data-arg="${w}" ${open ? '' : 'disabled'}>Visit</button></div></div>`;
   }
   return h;
 }
@@ -289,7 +284,7 @@ export function hangarHTML(G) {
     <footer>${G.tab === 'mission'
       ? '<button class="btn primary" data-act="takeoff">Take off</button>'
       : '<button class="btn primary" data-act="tab" data-arg="mission">Mission</button>'}
-      <button class="btn ghost" data-act="walk">Get out and walk round</button></footer>
+      <button class="btn ghost" data-act="walk">Walk round</button></footer>
   </div>`;
 }
 
@@ -297,7 +292,7 @@ export function hangarHTML(G) {
 export function fieldHTML(G, onWater) {
   const s = G.save, ac = G.ac;
   let h = `<div class="hangar">
-    <header><div><h2>${onWater ? 'Afloat' : 'Set down in the open'}</h2><small>No workshop here. Use what you carry, and what you can make.</small></div><div class="money">Kits ${s.kits}</div></header>
+    <header><div><h2>${onWater ? 'Afloat' : 'Camp'}</h2><small>No workshop here.</small></div><div class="money">Kits ${s.kits}</div></header>
     <section>${G.campNote ? `<p class="${G.campNote.startsWith('Down safely') ? 'okline' : 'warnline'}">${G.campNote}</p>` : ''}`;
   for (const k of PART_KEYS) {
     const v = ac.cond[k];
@@ -305,22 +300,20 @@ export function fieldHTML(G, onWater) {
       <div class="name">${PARTS[k].name}${G.fail[k] ? ' · BROKEN' : ''}</div>
       <div class="acts">${s.kits < 1 && G.fail[k]
         ? `<button class="mini" data-act="fieldbodge" data-arg="${k}">Bodge it</button>`
-        : `<button class="mini gold" data-act="fieldfix" data-arg="${k}" ${s.kits < 1 || (v > 95 && !G.fail[k]) ? 'disabled' : ''}>Use kit +30</button>`}</div>
+        : `<button class="mini gold" data-act="fieldfix" data-arg="${k}" ${s.kits < 1 || (v > 95 && !G.fail[k]) ? 'disabled' : ''}>Kit +30</button>`}</div>
       <div class="meter">${bar(v, condCls(v))}<span>${Math.round(v)}%</span></div>
     </div>`;
   }
   h += `<div class="row"><div class="name">Fuel</div><div class="meter">${bar((ac.fuel / G.stats.tank) * 100)}<span>${Math.round(ac.fuel)}</span></div></div>
     <div class="row"><div class="name">Make fuel</div>
-      <div class="acts"><button class="mini gold" data-act="brew" ${ac.fuel >= G.stats.tank - 1 ? 'disabled' : ''}>Try: +20%</button></div>
-      <p>${G.stats.space ? 'Crack fuel out of ice with the solar still.' : 'Distil something that burns from what is to hand.'} A right answer adds a fifth of a tank.</p></div>
-    <div class="row"><div class="name">Scavenge a repair kit</div>
-      <div class="acts"><button class="mini" data-act="scav" ${s.kits >= s.kitCap ? 'disabled' : ''}>Try: +1 kit</button></div>
-      <p>Make a kit from whatever you can find. A right answer makes one.</p></div>
-    ${ac.fuel < 1 ? '<p class="warnline bad">▲ The tank is dry. Make some fuel here, or call for help.</p>' : ''}
+      <div class="acts"><button class="mini gold" data-act="brew" ${ac.fuel >= G.stats.tank - 1 ? 'disabled' : ''}>Quiz: +20%</button></div></div>
+    <div class="row"><div class="name">Make a repair kit</div>
+      <div class="acts"><button class="mini" data-act="scav" ${s.kits >= s.kitCap ? 'disabled' : ''}>Quiz: +1</button></div></div>
+    ${ac.fuel < 1 ? '<p class="warnline bad">▲ Tank dry. Make fuel or call for help.</p>' : ''}
     </section>
     <footer>${ac.fuel < 1 ? '<button class="btn" data-act="tow">Call for help</button>' : '<button class="btn primary" data-act="takeoff">Take off</button>'}
       ${G.surfLabel && ac.fuel >= 1 ? `<button class="btn ghost" data-act="surface">${G.surfLabel}</button>` : ''}
-      <button class="btn ghost" data-act="walk">${onWater ? 'Climb out on the wing' : 'Get out and walk round'}</button></footer>
+      <button class="btn ghost" data-act="walk">${onWater ? 'Out on the wing' : 'Walk round'}</button></footer>
   </div>`;
   return h;
 }
